@@ -65,12 +65,20 @@ describe("qualification rules", () => {
       maxEstimatedRunCostUsd: 25,
     };
     expect(runSchema.safeParse(valid).success).toBe(true);
+    expect(runSchema.parse(valid).requireEmailAndPhone).toBe(false);
+    expect(
+      runSchema.parse({ ...valid, requireEmailAndPhone: true })
+        .requireEmailAndPhone,
+    ).toBe(true);
     for (const override of [
       { maxSitesToBuild: 4 },
       { maxSalesTasks: 4 },
       { maxLovableRepairAttempts: 3 },
       { radiusMeters: 50001 },
       { maxEstimatedRunCostUsd: -1 },
+      { requireEmailAndPhone: "true" },
+      { requireEmailAndPhone: true, maxRealEmails: 0 },
+      { requireEmailAndPhone: true, maxSalesTasks: 0 },
     ])
       expect(runSchema.safeParse({ ...valid, ...override }).success).toBe(
         false,

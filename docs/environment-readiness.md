@@ -1,36 +1,26 @@
 # Environment readiness — October 24, 2026
 
-**Dashboard running; full pipeline not ready.** This recheck used the current `.env.local`. The development server is running at <http://localhost:3000>. The worker is not running and configuration checks block startup. No run, build, product listing, recruitment, sales email, delivery or checkout was initiated. Google/Exa diagnostic probes may use API quota. No secret values are included here, and no environment values were changed during this recheck.
+**Read-only preflight passes; a complete live business run is still unverified.** The current Lovable build-waiting, paginated source-export and dual-contact selection fixes are local changes and need deployment before using the new run option in the hosted UI. No paid run, site generation, product listing, recruitment or email send was started during these checks.
 
-## Verified against configured services
+## Verified
 
-- Real Google Maps loads in Chromium with Williamsburg, Brooklyn selected, visible map imagery and no observed Google Maps authentication errors.
-- Dashboard `/api/config`, `/api/runs`, `/api/businesses` and `/api/overview` return HTTP 200. The database currently contains zero runs, businesses, orders and events; the empty map and metrics reflect those responses.
-- All eleven required Supabase tables are accessible, including `sales_tasks` and `sales_suppressions`.
-- Source bucket exists and is private; screenshot bucket exists and is public.
-- Docker daemon and Playwright Chromium work.
-- Lovable OAuth connects and advertises all six required MCP tools.
-- OpenAI credentials can retrieve the configured model.
-- Google Geocoding accepts the server key.
-- Whop account lookup succeeds.
-- Exa accepts a minimal search request.
-- Resend API access to list domains succeeds. Sender-domain verification remains blocked by missing sender settings.
+- The hosted dashboard and configuration/runs/businesses/overview APIs pass `verify:deployment` at `https://sidewalkai.netlify.app`.
+- The hosted Google map loads without observed Maps errors. The last database inspection found zero runs, businesses, sites, products, outreach emails and sales assignments.
+- All eleven required Supabase tables are accessible. The source ZIP bucket is private and the screenshot bucket is public.
+- Docker, Playwright Chromium, Lovable OAuth, Terac authentication/contracts, Whop account access, OpenAI model lookup, Google Geocoding/Places, Exa and Resend checks pass.
+- `mail.rerout.com` is verified, the sender matches it, and the sender postal address is configured locally and in Netlify.
+- The strengthened Lovable preflight checks availability and argument binding for creation, repairs, message polling, deployment and paginated source reads. It never executes the write operations.
+- `npm run check` passes: route generation, type checking, **151 tests** and the production build. The browser suite passes, including the new dual-contact option and salesperson reporting.
+- A separate two-second local recording test exported successfully to H.264 MP4. That technical test is not the requested three-minute demo.
 
-## Remaining blockers
+## Before the real demo
 
-| Blocker                                                                | Action                                                                                                                                                                      |
-| ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Google Places API (New) disabled                                       | Enable Places API (New) in the Google Cloud project owning the server key and allow it in the key's API restrictions. Recheck after propagation.                            |
-| `APP_URL` missing                                                      | Set the deployed public HTTPS origin used for salesperson briefs, buyer downloads and webhook registration.                                                                 |
-| `TERAC_API_KEY`, `TERAC_PROJECT_ID`, `TERAC_MAX_TASK_COST_USD` missing | Configure the Terac organization/project and assignment allowance. The Terac MCP sales contract has not been checked because these and the public-link settings are absent. |
-| `WHOP_WEBHOOK_SECRET` missing                                          | Register the `payment.succeeded` endpoint at `APP_URL/api/webhooks/whop` and store its unchanged `ws_…` signing secret.                                                     |
-| `EMAIL_FROM`, `RESEND_DOMAIN_ID`, `SENDER_POSTAL_ADDRESS` missing      | Configure the verified sending domain, sender email and physical postal address. Domain verification has not been checked.                                                  |
-| `DOWNLOAD_SIGNING_SECRET` missing                                      | Set a random signing secret of at least 32 characters for private download and signed sales links.                                                                          |
+1. Deploy these changes and restart the Mac worker when a paid run is authorized. No database migration is required.
+2. Choose the geographic search and explicit spending limits. Enable **Require both a sourced email and phone before building** for the full email-plus-caller demonstration, with both outreach caps at least one.
+3. Confirm a real qualifying business is discovered. If none qualifies, the run reports that result without inventing records, contacts or successful outreach.
+4. Verify actual Lovable generation/publication, complete source export and Docker build, Whop listing, acknowledged outreach email, and a funded Terac assignment within the configured allowance.
+5. Record the real hosted workflow and transparently edit waiting time into the requested three-minute video. Caller availability is not guaranteed.
 
-`npm run doctor` currently exits unsuccessfully with the nine missing settings above and the Places API failure. The dashboard and browser map can operate independently of full pipeline readiness. Rerun the diagnostic after resolving these blockers.
+## Limits
 
-## Validation and limits
-
-`npm run check` passed: type checking, all **102 tests**, and the production build. `npm run test:browser` passed for persisted records, business details, keyboard access, configuration gating, live empty states, fetch errors and salesperson handoff/report. A separate browser check loaded the real Google map and read the actual local API responses; its screenshot is saved to ignored `artifacts/configured-dashboard.png`.
-
-Read-only preflight does not establish provider creation permissions, model vision/structured generation, Nearby Search acceptance, Terac funding/caller availability, webhook delivery or successful purchase fulfillment. Those require a later authorized live run and genuine checkout. Classified markers and their live audit details remain unverified because no business records exist yet. No end-to-end live acceptance is claimed.
+Read-only checks do not establish provider write permissions, sufficient generation/recruitment credits, actual inbox receipt, caller completion, webhook delivery or successful buyer fulfillment. A genuine Whop checkout and worker delivery are still required to prove purchase-to-ZIP fulfillment. No end-to-end acceptance is claimed. Google/Exa diagnostic probes may use API quota; secret values are never printed.

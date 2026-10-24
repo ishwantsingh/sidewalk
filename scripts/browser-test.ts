@@ -77,6 +77,7 @@ try {
       assert.equal(body.area, "Brooklyn");
       assert.equal(body.maxSalesTasks, 2);
       assert.equal(body.maxRealEmails, 2);
+      assert.equal(body.requireEmailAndPhone, true);
       await route.fulfill({ status: 201, json: { id: "live-run" } });
     } else
       await route.fulfill({
@@ -127,6 +128,11 @@ try {
   await page
     .getByRole("textbox", { name: "Neighborhood or city" })
     .fill("Brooklyn");
+  await page
+    .getByRole("checkbox", {
+      name: "Require both a sourced email and phone before building",
+    })
+    .check();
   await page.getByRole("button", { name: "Start run", exact: true }).click();
   await page.waitForFunction(() => !document.querySelector('[role="dialog"]'));
   assert.equal(

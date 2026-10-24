@@ -10,31 +10,45 @@ export function cost(key: string) {
     throw new Error(`Invalid cost: ${key}`);
   return value;
 }
-export const runSchema = z.object({
-  area: z.string().trim().min(3).max(200),
-  radiusMeters: z.number().int().min(100).max(50000),
-  types: z
-    .array(
-      z.enum([
-        "cafe",
-        "restaurant",
-        "bakery",
-        "bar",
-        "florist",
-        "hair_salon",
-        "beauty_salon",
-      ]),
+export const runSchema = z
+  .object({
+    area: z.string().trim().min(3).max(200),
+    radiusMeters: z.number().int().min(100).max(50000),
+    types: z
+      .array(
+        z.enum([
+          "cafe",
+          "restaurant",
+          "bakery",
+          "bar",
+          "florist",
+          "hair_salon",
+          "beauty_salon",
+        ]),
+      )
+      .min(1)
+      .max(5),
+    maxBusinesses: z.number().int().min(1).max(30),
+    siteScoreThreshold: z.literal(45).default(45),
+    maxSitesToBuild: z.number().int().min(1).max(3),
+    maxRealEmails: z.number().int().min(0).max(3),
+    maxSalesTasks: z.number().int().min(0).max(3),
+    requireEmailAndPhone: z.boolean().default(false),
+    maxLovableRepairAttempts: z.number().int().min(0).max(2),
+    maxEstimatedRunCostUsd: z.number().min(1).max(100),
+  })
+  .superRefine((run, ctx) => {
+    if (
+      run.requireEmailAndPhone &&
+      (run.maxRealEmails < 1 || run.maxSalesTasks < 1)
     )
-    .min(1)
-    .max(5),
-  maxBusinesses: z.number().int().min(1).max(30),
-  siteScoreThreshold: z.literal(45).default(45),
-  maxSitesToBuild: z.number().int().min(1).max(3),
-  maxRealEmails: z.number().int().min(0).max(3),
-  maxSalesTasks: z.number().int().min(0).max(3),
-  maxLovableRepairAttempts: z.number().int().min(0).max(2),
-  maxEstimatedRunCostUsd: z.number().min(1).max(100),
-});
+      ctx.addIssue({
+        code: "custom",
+        path: ["requireEmailAndPhone"],
+        message:
+          "Requiring email and phone needs at least one sales email and one sales assignment",
+      });
+  });
 export type RunInput = z.infer<typeof runSchema>;
 export const required = [
   "APP_URL",

@@ -8,7 +8,7 @@ import { verifiedSender } from "../lib/mail";
 import { Terac } from "../lib/terac";
 import { salesOpportunity } from "../lib/sales";
 import { teracArguments } from "../lib/terac";
-import { Lovable } from "../lib/lovable";
+import { Lovable, toolArguments } from "../lib/lovable";
 import { whop } from "../lib/whop";
 import OpenAI from "openai";
 import { safeError } from "../lib/preflight";
@@ -125,16 +125,37 @@ const tasks: [string, () => Promise<unknown>][] = [
       const lovable = new Lovable();
       try {
         await lovable.connect();
-        for (const name of [
-          "create_project",
-          "get_project",
-          "send_message",
-          "deploy_project",
-          "list_files",
-          "read_file",
-        ])
-          if (!lovable.tools.some((t) => t.name === name))
-            throw new Error(`Missing tool ${name}`);
+        const ref = "a".repeat(40);
+        // Validate the real worker's controls locally; never execute these writes.
+        for (const [name, values] of Object.entries({
+          create_project: {
+            initial_message: "Contract check only",
+            wait: false,
+          },
+          get_project: { project_id: "contract-check" },
+          send_message: {
+            project_id: "contract-check",
+            message: "Contract check only",
+            wait: false,
+          },
+          get_message: {
+            project_id: "contract-check",
+            message_id: "contract-check",
+            thread_id: "contract-check",
+          },
+          deploy_project: { project_id: "contract-check" },
+          list_files: {
+            project_id: "contract-check",
+            ref,
+            limit: 100,
+            cursor: "contract-check",
+          },
+          read_file: { project_id: "contract-check", ref, path: "src/App.tsx" },
+        })) {
+          const tool = lovable.tools.find((t) => t.name === name);
+          if (!tool) throw new Error(`Missing tool ${name}`);
+          toolArguments(tool, values);
+        }
       } finally {
         await lovable.close();
       }

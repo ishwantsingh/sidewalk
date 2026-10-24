@@ -30,9 +30,18 @@ it("fails closed if the integration requires an unknown field", () => {
           required: ["newField"],
         },
       },
-      { project_id: "project-1" },
+      {},
     ),
   ).toThrow("unsupported argument");
+});
+it("never silently drops supplied wait, revision or pagination controls", () => {
+  for (const field of ["wait", "ref", "cursor"])
+    expect(() =>
+      toolArguments(
+        { name: "test", inputSchema: { type: "object", properties: {} } },
+        { [field]: true },
+      ),
+    ).toThrow(`does not support ${field}`);
 });
 
 it("preserves a raw JSON source file as source text", async () => {
@@ -50,6 +59,25 @@ it("preserves a raw JSON source file as source text", async () => {
     content: [{ type: "text", text: source }],
   });
   expect(await lovable.call("read_file", { path: "package.json" })).toEqual({
+    content: source,
+  });
+});
+
+it("does not mistake a JSON source file's content property for an MCP envelope", async () => {
+  const { Lovable } = await import("../lib/lovable");
+  const { vi } = await import("vitest");
+  const lovable = new Lovable();
+  lovable.tools = [
+    {
+      name: "read_file",
+      inputSchema: { type: "object", properties: { path: { type: "string" } } },
+    },
+  ];
+  const source = '{"content":"this is source data","name":"site"}\n';
+  vi.spyOn(lovable.client, "callTool").mockResolvedValue({
+    content: [{ type: "text", text: source }],
+  });
+  expect(await lovable.call("read_file", { path: "content.json" })).toEqual({
     content: source,
   });
 });

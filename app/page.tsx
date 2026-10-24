@@ -198,6 +198,7 @@ export default function Dashboard() {
         maxSitesToBuild: Number(f.get("maxSitesToBuild")),
         maxRealEmails: Number(f.get("maxRealEmails")),
         maxSalesTasks: Number(f.get("maxSalesTasks")),
+        requireEmailAndPhone: f.get("requireEmailAndPhone") === "on",
         maxLovableRepairAttempts: 2,
         maxEstimatedRunCostUsd: Number(f.get("maxEstimatedRunCostUsd")),
       });
@@ -549,6 +550,12 @@ export default function Dashboard() {
                   />
                 </label>
               </div>
+              <label className="run-contact-filter">
+                <input type="checkbox" name="requireEmailAndPhone" />
+                <span>
+                  Require both a sourced email and phone before building
+                </span>
+              </label>
               <p className="form-note">
                 Up to 2 repairs per site. Qualified prospects receive an email
                 when a sourced address is available and a Terac call when a

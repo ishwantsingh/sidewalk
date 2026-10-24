@@ -10,58 +10,118 @@ import { safePath, slug } from "./domain";
 import { Lovable } from "./lovable";
 import { db } from "./db";
 import { env } from "./config";
+import { z } from "zod";
 const exec = promisify(execFile);
+const sourcePageSchema = z.object({
+  ref: z.string(),
+  data: z.array(z.object({ path: z.string(), binary: z.boolean() })).max(100),
+  pagination: z.object({
+    has_more: z.boolean(),
+    next_cursor: z.string().nullable().optional(),
+  }),
+  truncated: z.boolean().optional(),
+});
+/** Collect a complete, immutable source tree before invoking any generated code. */
+export async function readProjectSource(
+  lovable: Pick<Lovable, "call">,
+  projectId: string,
+  ref: string,
+) {
+  if (!/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/i.test(ref))
+    throw new Error("Source export requires a completed build's commit SHA");
+  const paths: string[] = [];
+  const seenPaths = new Set<string>();
+  const cursors = new Set<string>();
+  let cursor: string | undefined;
+  let pages = 0;
+  do {
+    if (++pages > 100)
+      throw new Error("Lovable source listing exceeds page limit");
+    const listed = sourcePageSchema.parse(
+      await lovable.call("list_files", {
+        project_id: projectId,
+        ref,
+        limit: 100,
+        cursor,
+      }),
+    );
+    if (listed.ref !== ref || listed.truncated)
+      throw new Error("Incomplete or mismatched Lovable source listing");
+    for (const file of listed.data) {
+      if (file.binary)
+        throw new Error("Binary source file cannot be exported faithfully");
+      const path = safePath(file.path);
+      if (/\.(png|jpg|jpeg|gif|webp|ico|woff2?|ttf|pdf|zip)$/i.test(path))
+        throw new Error(`Binary asset cannot be exported: ${path}`);
+      if (
+        !/\.(tsx?|jsx?|json|html|css|svg|md|txt|ya?ml|mjs|cjs)$/.test(path) &&
+        path !== ".gitignore"
+      )
+        throw new Error(`Unsupported export file: ${path}`);
+      if (seenPaths.has(path))
+        throw new Error(`Duplicate source path: ${path}`);
+      seenPaths.add(path);
+      paths.push(path);
+      if (paths.length > 1000)
+        throw new Error("Lovable source listing exceeds file limit");
+    }
+    const next = listed.pagination.next_cursor;
+    if (listed.pagination.has_more) {
+      if (
+        !listed.data.length ||
+        typeof next !== "string" ||
+        !next ||
+        cursors.has(next)
+      )
+        throw new Error("Incomplete or repeated Lovable pagination cursor");
+      cursors.add(next);
+      cursor = next;
+    } else {
+      if (next != null)
+        throw new Error("Inconsistent Lovable pagination cursor");
+      cursor = undefined;
+    }
+  } while (cursor);
+  if (!paths.length) throw new Error("No complete file list returned");
+  const source: { path: string; content: string }[] = [];
+  let bytes = 0;
+  for (const path of paths) {
+    const result = await lovable.call("read_file", {
+      project_id: projectId,
+      ref,
+      path,
+    });
+    if (
+      typeof result.content !== "string" ||
+      result.truncated ||
+      (result.encoding &&
+        !["utf-8", "utf8", "text"].includes(String(result.encoding))) ||
+      result.content.includes("\0")
+    )
+      throw new Error(`Incomplete source file: ${path}`);
+    if (/(?:sk-proj-|sb_secret_|-----BEGIN.*PRIVATE KEY)/.test(result.content))
+      throw new Error("Secret detected in export");
+    bytes += Buffer.byteLength(result.content);
+    if (bytes > 25 * 1024 * 1024)
+      throw new Error("Lovable source exceeds size limit");
+    source.push({ path, content: result.content });
+  }
+  return source;
+}
 export async function exportSite(
   lovable: Lovable,
   projectId: string,
   siteId: string,
   name: string,
+  ref: string,
 ) {
   const dir = await mkdtemp(join(tmpdir(), "sidewalk-"));
   try {
-    const listed = await lovable.call("list_files", {
-      project_id: projectId,
-      ref: "HEAD",
-    });
-    if (listed.truncated || listed.has_more || listed.next_cursor)
-      throw new Error("Incomplete/paginated Lovable source listing");
-    const files = listed.files;
-    if (!Array.isArray(files) || !files.length)
-      throw new Error("No complete file list returned");
-    const paths: string[] = [];
-    for (const file of files) {
-      if (typeof file !== "string" && (file.binary || file.is_binary))
-        throw new Error("Binary source file cannot be exported faithfully");
-      const path = safePath(
-        typeof file === "string" ? file : String(file.path),
-      );
-      if (/\.(png|jpg|jpeg|gif|webp|ico|woff2?|ttf|pdf|zip)$/i.test(path))
-        throw new Error(`Binary asset cannot be exported: ${path}`);
-      if (
-        !/\.(tsx?|jsx?|json|html|css|svg|md|txt|ya?ml|mjs|cjs)$/.test(path) &&
-        ![".gitignore"].includes(path)
-      )
-        throw new Error(`Unsupported export file: ${path}`);
-      const result = await lovable.call("read_file", {
-        project_id: projectId,
-        ref: "HEAD",
-        path,
-      });
-      if (
-        typeof result.content !== "string" ||
-        result.truncated ||
-        (result.encoding &&
-          !["utf-8", "utf8", "text"].includes(String(result.encoding))) ||
-        (typeof result.content === "string" && result.content.includes("\0"))
-      )
-        throw new Error(`Incomplete source file: ${path}`);
-      if (
-        /(?:sk-proj-|sb_secret_|-----BEGIN.*PRIVATE KEY)/.test(result.content)
-      )
-        throw new Error("Secret detected in export");
+    const source = await readProjectSource(lovable, projectId, ref);
+    const paths = source.map((file) => file.path);
+    for (const { path, content } of source) {
       await mkdir(dirname(join(dir, path)), { recursive: true });
-      await writeFile(join(dir, path), result.content);
-      paths.push(path);
+      await writeFile(join(dir, path), content);
     }
     if (
       !paths.includes("package.json") ||

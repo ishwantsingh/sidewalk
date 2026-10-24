@@ -1008,3 +1008,13 @@ tbody tr:hover {
   border-radius: 6px;
   font: inherit;
 }
+.run-contact-filter {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.65rem;
+}
+.run-contact-filter input {
+  width: auto;
+  flex: none;
+}

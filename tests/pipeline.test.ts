@@ -11,6 +11,7 @@ const f = vi.hoisted(() => ({
   queueSalesTask: vi.fn(),
   sendOutreach: vi.fn(),
   call: vi.fn(),
+  waitForBuild: vi.fn(),
   research: vi.fn(),
 }));
 vi.mock("../lib/db", () => ({
@@ -46,6 +47,7 @@ vi.mock("../lib/lovable", () => ({
   Lovable: class {
     async connect() {}
     call = f.call;
+    waitForBuild = f.waitForBuild;
     async close() {}
   },
 }));
@@ -60,6 +62,7 @@ const params: RunInput = {
   maxSitesToBuild: 1,
   maxRealEmails: 1,
   maxSalesTasks: 1,
+  requireEmailAndPhone: false,
   maxLovableRepairAttempts: 2,
   maxEstimatedRunCostUsd: 25,
 };
@@ -125,9 +128,13 @@ beforeEach(() => {
   });
   f.call.mockImplementation(async (name) =>
     name === "create_project"
-      ? { project_id: "project-test", preview_url: "https://concept.example" }
+      ? { projectId: "project-test", message_id: "message-test" }
       : { url: "https://published.example" },
   );
+  f.waitForBuild.mockResolvedValue({
+    url: "https://concept.example",
+    ref: "a".repeat(40),
+  });
   f.exportSite.mockResolvedValue({
     zip_path: "private/source.zip",
     checksum: "test-checksum",
@@ -147,6 +154,82 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllEnvs());
 describe("orchestrator safety gates with isolated provider adapters", () => {
+  it("persists the project before waiting and never audits or sells a paused build", async () => {
+    f.waitForBuild.mockImplementation(async () => {
+      expect(f.insert).toHaveBeenCalledWith(
+        "sites",
+        expect.objectContaining({ lovable_project_id: "project-test" }),
+      );
+      expect(f.inspect).not.toHaveBeenCalled();
+      throw new Error("Lovable build paused for input");
+    });
+    await runPipeline({ id: "run-test", params });
+    expect(f.waitForBuild).toHaveBeenCalledOnce();
+    expect(f.inspect).not.toHaveBeenCalled();
+    expect(f.exportSite).not.toHaveBeenCalled();
+    expect(f.listProduct).not.toHaveBeenCalled();
+    expect(f.sendOutreach).not.toHaveBeenCalled();
+    expect(f.queueSalesTask).not.toHaveBeenCalled();
+  });
+  it("waits for repairs and exports the final ready revision", async () => {
+    f.inspect.mockResolvedValueOnce({ passed: false, defects: ["overflow"] });
+    f.waitForBuild
+      .mockResolvedValueOnce({
+        url: "https://initial.example",
+        ref: "a".repeat(40),
+      })
+      .mockResolvedValueOnce({
+        url: "https://repaired.example",
+        ref: "b".repeat(40),
+      });
+    await runPipeline({ id: "run-test", params });
+    expect(f.waitForBuild).toHaveBeenCalledTimes(2);
+    expect(f.inspect.mock.calls.map(([url]) => url)).toEqual([
+      "https://initial.example",
+      "https://repaired.example",
+      "https://published.example",
+    ]);
+    expect(f.exportSite).toHaveBeenCalledWith(
+      expect.anything(),
+      "project-test",
+      "sites-test",
+      "Test Venue",
+      "b".repeat(40),
+    );
+  });
+  it.each(["contactEmail", "contactSource", "contactPhone", "phoneSource"])(
+    "skips building when the dual-contact option is enabled and %s is missing",
+    async (field) => {
+      f.research.mockResolvedValue({ ...(await f.research()), [field]: null });
+      await runPipeline({
+        id: "run-test",
+        params: { ...params, requireEmailAndPhone: true },
+      });
+      expect(f.call).not.toHaveBeenCalled();
+      expect(f.event).toHaveBeenCalledWith(
+        "run-test",
+        "businesses-test",
+        "CONTACT_REQUIREMENT_NOT_MET",
+        expect.any(String),
+      );
+      expect(f.event).toHaveBeenCalledWith(
+        "run-test",
+        null,
+        "NO_QUALIFIED_BUSINESSES",
+        expect.any(String),
+      );
+      expect(f.sendOutreach).not.toHaveBeenCalled();
+      expect(f.queueSalesTask).not.toHaveBeenCalled();
+    },
+  );
+  it("builds a prospect with both sourced contacts when the option is enabled", async () => {
+    await runPipeline({
+      id: "run-test",
+      params: { ...params, requireEmailAndPhone: true },
+    });
+    expect(f.sendOutreach).toHaveBeenCalledOnce();
+    expect(f.queueSalesTask).toHaveBeenCalledOnce();
+  });
   it("stops a broken preview after exactly two repairs, before ZIP/listing/sales", async () => {
     f.inspect.mockResolvedValue({
       score: 20,
