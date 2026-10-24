@@ -42,6 +42,7 @@ export default function Dashboard() {
     [selectedRun, setSelectedRun] = useState(""),
     [detail, setDetail] = useState<Row | null>(null),
     [form, setForm] = useState(false),
+    [buildTarget, setBuildTarget] = useState<Row | null>(null),
     [loading, setLoading] = useState(false),
     [filter, setFilter] = useState("ALL"),
     [search, setSearch] = useState(""),
@@ -190,10 +191,13 @@ export default function Dashboard() {
     const f = new FormData(e.currentTarget);
     try {
       const run = await api("runs", {
+        ...(buildTarget ? { selectedBusinessId: buildTarget.id } : {}),
         area: f.get("area"),
-        radiusMeters: Number(f.get("radiusMeters")),
-        types: [String(f.get("types"))],
-        maxBusinesses: Number(f.get("maxBusinesses")),
+        radiusMeters: buildTarget ? 1300 : Number(f.get("radiusMeters")),
+        types: buildTarget
+          ? runs.find((run) => run.id === buildTarget.run_id)?.params.types
+          : [String(f.get("types"))],
+        maxBusinesses: buildTarget ? 1 : Number(f.get("maxBusinesses")),
         siteScoreThreshold: 45,
         maxSitesToBuild: Number(f.get("maxSitesToBuild")),
         maxRealEmails: Number(f.get("maxRealEmails")),
@@ -218,7 +222,13 @@ export default function Dashboard() {
         <a className="brand" href="/">
           sidewalk
         </a>
-        <button disabled={!ready} onClick={() => setForm(true)}>
+        <button
+          disabled={!ready}
+          onClick={() => {
+            setBuildTarget(null);
+            setForm(true);
+          }}
+        >
           New run <span aria-hidden="true">＋</span>
         </button>
       </header>
@@ -267,12 +277,24 @@ export default function Dashboard() {
               }}
               selectedId={detail?.id}
               onSelect={openBusiness}
-              onNewRun={() => setForm(true)}
+              onNewRun={() => {
+                setBuildTarget(null);
+                setForm(true);
+              }}
             >
               {detail && (
                 <BusinessDetails
                   detail={detail}
                   onClose={closeBusiness}
+                  onBuild={(business) => {
+                    const sourceRun = runs.find(
+                      (run) => run.id === business.run_id,
+                    );
+                    if (sourceRun) setMapArea(sourceRun.params.area);
+                    setBuildTarget(business);
+                    closeBusiness();
+                    setForm(true);
+                  }}
                   onRetry={(id) =>
                     void api(`orders/${id}/retry`, {})
                       .then(() => api(`businesses/${detail.id}`))
@@ -451,7 +473,18 @@ export default function Dashboard() {
             >
               ×
             </button>
-            <h2 id="run-title">New run</h2>
+            <h2 id="run-title">
+              {buildTarget ? "Build selected business" : "New run"}
+            </h2>
+            {buildTarget && (
+              <div className="notice">
+                <strong>{buildTarget.name}</strong>
+                <p>
+                  Explicit concept-build selection. Existing research and the
+                  actual audit score are preserved; discovery is skipped.
+                </p>
+              </div>
+            )}
             <p>
               Real searches, site builds, sales emails and Terac sales calls.
               Set your limits.
@@ -467,6 +500,7 @@ export default function Dashboard() {
                 Neighborhood or city
                 <input
                   name="area"
+                  readOnly={!!buildTarget}
                   defaultValue={mapArea}
                   placeholder="Williamsburg, Brooklyn, NY"
                   required
@@ -474,46 +508,51 @@ export default function Dashboard() {
                 />
               </label>
               <div className="form-grid">
-                <label>
-                  Business category
-                  <select name="types">
-                    <option value="cafe">Cafes</option>
-                    <option value="restaurant">Restaurants</option>
-                    <option value="bakery">Bakeries</option>
-                    <option value="florist">Florists</option>
-                    <option value="hair_salon">Hair salons</option>
-                  </select>
-                </label>
-                <label>
-                  Search radius (meters)
-                  <input
-                    name="radiusMeters"
-                    type="number"
-                    defaultValue={1300}
-                    min={100}
-                    max={50000}
-                    required
-                  />
-                </label>
-                <label>
-                  Businesses to evaluate
-                  <input
-                    name="maxBusinesses"
-                    type="number"
-                    defaultValue={20}
-                    min={1}
-                    max={30}
-                    required
-                  />
-                </label>
+                {!buildTarget && (
+                  <>
+                    <label>
+                      Business category
+                      <select name="types">
+                        <option value="cafe">Cafes</option>
+                        <option value="restaurant">Restaurants</option>
+                        <option value="bakery">Bakeries</option>
+                        <option value="florist">Florists</option>
+                        <option value="hair_salon">Hair salons</option>
+                      </select>
+                    </label>
+                    <label>
+                      Search radius (meters)
+                      <input
+                        name="radiusMeters"
+                        type="number"
+                        defaultValue={1300}
+                        min={100}
+                        max={50000}
+                        required
+                      />
+                    </label>
+                    <label>
+                      Businesses to evaluate
+                      <input
+                        name="maxBusinesses"
+                        type="number"
+                        defaultValue={20}
+                        min={1}
+                        max={30}
+                        required
+                      />
+                    </label>
+                  </>
+                )}
                 <label>
                   Maximum site builds
                   <input
                     name="maxSitesToBuild"
                     type="number"
-                    defaultValue={2}
+                    readOnly={!!buildTarget}
+                    defaultValue={buildTarget ? 1 : 2}
                     min={1}
-                    max={3}
+                    max={buildTarget ? 1 : 3}
                     required
                   />
                 </label>
@@ -522,7 +561,7 @@ export default function Dashboard() {
                   <input
                     name="maxRealEmails"
                     type="number"
-                    defaultValue={2}
+                    defaultValue={buildTarget ? 1 : 2}
                     min={0}
                     max={3}
                     required
@@ -533,7 +572,7 @@ export default function Dashboard() {
                   <input
                     name="maxSalesTasks"
                     type="number"
-                    defaultValue={2}
+                    defaultValue={buildTarget ? 1 : 2}
                     min={0}
                     max={3}
                     required
@@ -544,7 +583,8 @@ export default function Dashboard() {
                   <input
                     name="maxEstimatedRunCostUsd"
                     type="number"
-                    defaultValue={75}
+                    step="0.01"
+                    defaultValue={buildTarget ? 26 : 75}
                     min={1}
                     max={100}
                     required
@@ -552,7 +592,11 @@ export default function Dashboard() {
                 </label>
               </div>
               <label className="run-contact-filter">
-                <input type="checkbox" name="requireEmailAndPhone" />
+                <input
+                  type="checkbox"
+                  name="requireEmailAndPhone"
+                  defaultChecked={!!buildTarget}
+                />
                 <span>
                   Require both a sourced email and phone before building
                 </span>

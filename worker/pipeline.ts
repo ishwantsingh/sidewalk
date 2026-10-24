@@ -28,208 +28,287 @@ export async function runPipeline(
   { retryPreBuild = false } = {},
 ) {
   const { id, params: p } = run;
-  await reserve(id, null, "DISCOVERY", cost("COST_PLACES_SEARCH_USD"));
-  const places = await discover(
-    p.area,
-    p.radiusMeters,
-    p.types,
-    p.maxBusinesses,
-  );
-  await event(
-    id,
-    null,
-    "DISCOVERED",
-    `${places.length} operational Google Places results. Attribution: Google Maps. Only place IDs and independently sourced identities are retained.`,
-  );
   const candidates: {
     business: Record<string, any>;
     brief: Brief;
     opportunity: ReturnType<typeof economics>;
     audit: Record<string, any>;
   }[] = [];
-  for (const place of places.slice(0, p.maxBusinesses)) {
-    const existing = await rows("businesses", "place_id", place.id);
-    const retry = retryPreBuild && existing[0]?.run_id === id;
-    if (existing.length && !retry) {
-      await event(
-        id,
-        null,
-        "DUPLICATE_SKIPPED",
-        `Place ID ${place.id} already processed`,
+  if (p.selectedBusinessId) {
+    const business = (await rows("businesses", "id", p.selectedBusinessId))[0];
+    if (!business) throw new Error("Selected business does not exist");
+    const [audits, opportunities, sites, history] = await Promise.all([
+      rows("audits", "business_id", business.id),
+      rows("opportunities", "business_id", business.id),
+      rows("sites", "business_id", business.id),
+      rows("events", "business_id", business.id),
+    ]);
+    if (
+      sites.length ||
+      history.some((entry) => entry.action === "LOVABLE_BUILD")
+    )
+      throw new Error(
+        "This business already has a build attempt; inspect it before recovery",
       );
-      continue;
-    }
-    let business: Record<string, any> | undefined = retry
-      ? existing[0]
-      : undefined;
-    try {
-      if (retry && (await rows("sites", "business_id", business!.id)).length)
-        throw new Error("Cannot retry a business after site creation");
-      await reserve(
-        id,
-        null,
-        "RESEARCH",
-        cost("COST_EXA_SEARCH_USD") + cost("COST_MODEL_RESEARCH_USD"),
-      );
-      const brief = await research(
-        place.displayName.text,
-        place.formattedAddress,
-        place.websiteUri,
-      );
-      if (!brief.facts.length) {
-        await event(
-          id,
-          null,
-          "NEEDS_REVIEW",
-          `Place ${place.id}: no independently verified identity facts`,
-        );
-        continue;
-      }
-      const location = brief.facts.find(
-        (f) => /address|location/i.test(f.label) && f.confidence === "high",
-      )?.value;
-      const identity = identityKey(brief.name, location, brief.officialWebsite);
-      const duplicate = await rows("businesses", "identity_key", identity);
-      if (duplicate.some((row) => row.id !== business?.id)) continue;
-      const businessValues = {
-        run_id: id,
-        place_id: place.id,
-        identity_key: identity,
-        name: brief.name,
-        category: brief.category,
-        website_url: brief.officialWebsite,
-        email: brief.contactEmail,
-        email_source: brief.contactSource,
-        phone: brief.contactPhone,
-        phone_source: brief.phoneSource,
-        source_urls: [...new Set(brief.facts.map((f) => f.source))],
-        brief,
-        state: "DISCOVERED",
-        failure_stage: null,
-        failure_reason: null,
-      };
-      if (business) {
-        await update("businesses", business.id, businessValues);
-        business = { ...business, ...businessValues };
-      } else business = await insert("businesses", businessValues);
-      if (!business) throw new Error("Business was not persisted");
-      let audit: Record<string, any> = {
-        score: null,
-        defects: [],
-        classification: "NEEDS_REVIEW",
-      };
-      if (!brief.ambiguous && brief.officialWebsite) {
-        try {
-          await reserve(
-            id,
-            business.id,
-            "SCREENSHOT_AUDIT",
-            cost("COST_MODEL_RESEARCH_USD"),
-          );
-          const measured = await inspect(brief.officialWebsite);
-          audit = {
-            ...measured,
-            classification: classify(measured.score, measured.defects),
-          };
-          delete audit.passed;
-        } catch (error) {
-          audit = {
-            ...audit,
-            defects: [
-              `Audit inaccessible: ${error instanceof Error ? error.message : String(error)}`,
-            ],
-          };
-        }
-      } else
-        audit.classification = classify(
-          null,
-          [],
-          brief.websiteAbsent && !brief.ambiguous,
-        );
-      const previousAudit = retry
-        ? (await rows("audits", "business_id", business.id))[0]
-        : null;
-      if (previousAudit) await update("audits", previousAudit.id, audit);
-      else await insert("audits", { business_id: business.id, ...audit });
-      await update("businesses", business.id, { state: "AUDITED" });
-      const economicsData = economics(
-        audit.score,
-        audit.classification,
-        !!(brief.contactPhone || brief.contactEmail),
-        Math.min(1, brief.facts.length / 6),
-        cost("SALE_PRICE_USD"),
-        cost("COST_LOVABLE_BUILD_USD") +
-          p.maxLovableRepairAttempts * cost("COST_LOVABLE_REPAIR_USD") +
-          (2 + p.maxLovableRepairAttempts) * cost("COST_MODEL_RESEARCH_USD"),
-        cost("COST_EXA_SEARCH_USD") + cost("COST_MODEL_RESEARCH_USD") * 2,
-        cost("PAYMENT_FEE_PERCENT"),
-        cost("PAYMENT_FEE_FIXED_USD"),
-        brief.contactPhone && p.maxSalesTasks > 0
-          ? cost("TERAC_MAX_TASK_COST_USD")
-          : 0,
-      );
-      const previousOpportunity = retry
-        ? (await rows("opportunities", "business_id", business.id))[0]
-        : null;
-      if (previousOpportunity)
-        await update("opportunities", previousOpportunity.id, economicsData);
-      else
-        await insert("opportunities", {
-          business_id: business.id,
-          ...economicsData,
-        });
-      const meetsContactRequirement =
-        !p.requireEmailAndPhone ||
-        !!(
+    const brief = business.brief as Brief;
+    const audit = audits[0];
+    const opportunity = opportunities[0];
+    const location = brief?.facts?.find(
+      (fact) =>
+        /address|location/i.test(fact.label) && fact.confidence === "high",
+    );
+    if (
+      !brief ||
+      brief.chain ||
+      brief.ambiguous ||
+      !location ||
+      brief.facts.length < 3 ||
+      !audit ||
+      (audit.score == null && audit.classification !== "NO_WEBSITE") ||
+      !opportunity ||
+      Number(opportunity.expected_contribution) <= 0 ||
+      !(brief.contactEmail || brief.contactPhone) ||
+      (p.requireEmailAndPhone &&
+        !(
           brief.contactEmail &&
           brief.contactSource &&
           brief.contactPhone &&
           brief.phoneSource
-        );
-      const qualified =
-        ["NO_WEBSITE", "POOR_WEBSITE"].includes(audit.classification) &&
-        !!(brief.contactPhone || brief.contactEmail) &&
-        meetsContactRequirement &&
-        !brief.chain &&
-        !!location &&
-        brief.facts.length >= 3 &&
-        economicsData.expected_contribution > 0;
-      await update("businesses", business.id, {
-        state: !(brief.contactPhone || brief.contactEmail)
-          ? "NO_CONTACT"
-          : qualified
-            ? "QUALIFIED"
-            : "REJECTED",
-      });
-      await event(
-        id,
-        business.id,
-        "AUDITED",
-        `${audit.classification}; ${audit.score === null ? "score N/A" : `${audit.score}/100`}; expected contribution $${economicsData.expected_contribution.toFixed(2)} using an explicit heuristic.`,
+        ))
+    )
+      throw new Error(
+        "Selected business needs a verified identity, measured audit, sourced contacts and positive estimated economics",
       );
-      if (!meetsContactRequirement)
+    if (audit.classification === "GOOD_WEBSITE" && audit.defects.length < 2)
+      throw new Error(
+        "Selected business has no substantial measured improvement opportunity",
+      );
+    await update("businesses", business.id, {
+      run_id: id,
+      state: "SELECTED",
+      failure_stage: null,
+      failure_reason: null,
+    });
+    business.run_id = id;
+    await event(
+      id,
+      business.id,
+      "BUSINESS_SELECTED",
+      `Explicit concept-build selection; original audit preserved: ${audit.classification}, ${audit.score ?? "N/A"}/100. Automatic qualification threshold was not changed.`,
+    );
+    candidates.push({
+      business,
+      brief,
+      audit,
+      opportunity: opportunity as ReturnType<typeof economics>,
+    });
+  } else {
+    await reserve(id, null, "DISCOVERY", cost("COST_PLACES_SEARCH_USD"));
+    const places = await discover(
+      p.area,
+      p.radiusMeters,
+      p.types,
+      p.maxBusinesses,
+    );
+    await event(
+      id,
+      null,
+      "DISCOVERED",
+      `${places.length} operational Google Places results. Attribution: Google Maps. Only place IDs and independently sourced identities are retained.`,
+    );
+    for (const place of places.slice(0, p.maxBusinesses)) {
+      const existing = await rows("businesses", "place_id", place.id);
+      const retry = retryPreBuild && existing[0]?.run_id === id;
+      if (existing.length && !retry) {
+        await event(
+          id,
+          null,
+          "DUPLICATE_SKIPPED",
+          `Place ID ${place.id} already processed`,
+        );
+        continue;
+      }
+      let business: Record<string, any> | undefined = retry
+        ? existing[0]
+        : undefined;
+      try {
+        if (retry && (await rows("sites", "business_id", business!.id)).length)
+          throw new Error("Cannot retry a business after site creation");
+        await reserve(
+          id,
+          null,
+          "RESEARCH",
+          cost("COST_EXA_SEARCH_USD") + cost("COST_MODEL_RESEARCH_USD"),
+        );
+        const brief = await research(
+          place.displayName.text,
+          place.formattedAddress,
+          place.websiteUri,
+        );
+        if (!brief.facts.length) {
+          await event(
+            id,
+            null,
+            "NEEDS_REVIEW",
+            `Place ${place.id}: no independently verified identity facts`,
+          );
+          continue;
+        }
+        const location = brief.facts.find(
+          (f) => /address|location/i.test(f.label) && f.confidence === "high",
+        )?.value;
+        const identity = identityKey(
+          brief.name,
+          location,
+          brief.officialWebsite,
+        );
+        const duplicate = await rows("businesses", "identity_key", identity);
+        if (duplicate.some((row) => row.id !== business?.id)) continue;
+        const businessValues = {
+          run_id: id,
+          place_id: place.id,
+          identity_key: identity,
+          name: brief.name,
+          category: brief.category,
+          website_url: brief.officialWebsite,
+          email: brief.contactEmail,
+          email_source: brief.contactSource,
+          phone: brief.contactPhone,
+          phone_source: brief.phoneSource,
+          source_urls: [...new Set(brief.facts.map((f) => f.source))],
+          brief,
+          state: "DISCOVERED",
+          failure_stage: null,
+          failure_reason: null,
+        };
+        if (business) {
+          await update("businesses", business.id, businessValues);
+          business = { ...business, ...businessValues };
+        } else business = await insert("businesses", businessValues);
+        if (!business) throw new Error("Business was not persisted");
+        let audit: Record<string, any> = {
+          score: null,
+          defects: [],
+          classification: "NEEDS_REVIEW",
+        };
+        if (!brief.ambiguous && brief.officialWebsite) {
+          try {
+            await reserve(
+              id,
+              business.id,
+              "SCREENSHOT_AUDIT",
+              cost("COST_MODEL_RESEARCH_USD"),
+            );
+            const measured = await inspect(brief.officialWebsite);
+            audit = {
+              ...measured,
+              classification: classify(measured.score, measured.defects),
+            };
+            delete audit.passed;
+          } catch (error) {
+            audit = {
+              ...audit,
+              defects: [
+                `Audit inaccessible: ${error instanceof Error ? error.message : String(error)}`,
+              ],
+            };
+          }
+        } else
+          audit.classification = classify(
+            null,
+            [],
+            brief.websiteAbsent && !brief.ambiguous,
+          );
+        const previousAudit = retry
+          ? (await rows("audits", "business_id", business.id))[0]
+          : null;
+        if (previousAudit) await update("audits", previousAudit.id, audit);
+        else await insert("audits", { business_id: business.id, ...audit });
+        await update("businesses", business.id, { state: "AUDITED" });
+        const economicsData = economics(
+          audit.score,
+          audit.classification,
+          !!(brief.contactPhone || brief.contactEmail),
+          Math.min(1, brief.facts.length / 6),
+          cost("SALE_PRICE_USD"),
+          cost("COST_LOVABLE_BUILD_USD") +
+            p.maxLovableRepairAttempts * cost("COST_LOVABLE_REPAIR_USD") +
+            (2 + p.maxLovableRepairAttempts) * cost("COST_MODEL_RESEARCH_USD"),
+          cost("COST_EXA_SEARCH_USD") + cost("COST_MODEL_RESEARCH_USD") * 2,
+          cost("PAYMENT_FEE_PERCENT"),
+          cost("PAYMENT_FEE_FIXED_USD"),
+          brief.contactPhone && p.maxSalesTasks > 0
+            ? cost("TERAC_MAX_TASK_COST_USD")
+            : 0,
+        );
+        const previousOpportunity = retry
+          ? (await rows("opportunities", "business_id", business.id))[0]
+          : null;
+        if (previousOpportunity)
+          await update("opportunities", previousOpportunity.id, economicsData);
+        else
+          await insert("opportunities", {
+            business_id: business.id,
+            ...economicsData,
+          });
+        const meetsContactRequirement =
+          !p.requireEmailAndPhone ||
+          !!(
+            brief.contactEmail &&
+            brief.contactSource &&
+            brief.contactPhone &&
+            brief.phoneSource
+          );
+        const qualified =
+          ["NO_WEBSITE", "POOR_WEBSITE"].includes(audit.classification) &&
+          !!(brief.contactPhone || brief.contactEmail) &&
+          meetsContactRequirement &&
+          !brief.chain &&
+          !!location &&
+          brief.facts.length >= 3 &&
+          economicsData.expected_contribution > 0;
+        await update("businesses", business.id, {
+          state: !(brief.contactPhone || brief.contactEmail)
+            ? "NO_CONTACT"
+            : qualified
+              ? "QUALIFIED"
+              : "REJECTED",
+        });
         await event(
           id,
           business.id,
-          "CONTACT_REQUIREMENT_NOT_MET",
-          "Build skipped: this run requires both a publicly sourced email and phone number.",
+          "AUDITED",
+          `${audit.classification}; ${audit.score === null ? "score N/A" : `${audit.score}/100`}; expected contribution $${economicsData.expected_contribution.toFixed(2)} using an explicit heuristic.`,
         );
-      if (qualified)
-        candidates.push({ business, brief, opportunity: economicsData, audit });
-    } catch (error) {
-      if (business)
-        await update("businesses", business.id, {
-          state: "FAILED",
-          failure_stage: "RESEARCH_AUDIT",
-          failure_reason:
-            error instanceof Error ? error.message : String(error),
-        });
-      await event(
-        id,
-        business?.id ?? null,
-        "FAILED",
-        error instanceof Error ? error.message : String(error),
-      );
+        if (!meetsContactRequirement)
+          await event(
+            id,
+            business.id,
+            "CONTACT_REQUIREMENT_NOT_MET",
+            "Build skipped: this run requires both a publicly sourced email and phone number.",
+          );
+        if (qualified)
+          candidates.push({
+            business,
+            brief,
+            opportunity: economicsData,
+            audit,
+          });
+      } catch (error) {
+        if (business)
+          await update("businesses", business.id, {
+            state: "FAILED",
+            failure_stage: "RESEARCH_AUDIT",
+            failure_reason:
+              error instanceof Error ? error.message : String(error),
+          });
+        await event(
+          id,
+          business?.id ?? null,
+          "FAILED",
+          error instanceof Error ? error.message : String(error),
+        );
+      }
     }
   }
   let salesTasks = 0,

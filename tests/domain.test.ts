@@ -71,6 +71,11 @@ describe("qualification rules", () => {
         .requireEmailAndPhone,
     ).toBe(true);
     for (const override of [
+      { selectedBusinessId: "not-a-uuid" },
+      {
+        selectedBusinessId: "00000000-0000-4000-8000-000000000000",
+        maxSitesToBuild: 2,
+      },
       { maxSitesToBuild: 4 },
       { maxSalesTasks: 4 },
       { maxLovableRepairAttempts: 3 },

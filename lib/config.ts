@@ -12,6 +12,7 @@ export function cost(key: string) {
 }
 export const runSchema = z
   .object({
+    selectedBusinessId: z.uuid().optional(),
     area: z.string().trim().min(3).max(200),
     radiusMeters: z.number().int().min(100).max(50000),
     types: z
@@ -38,6 +39,12 @@ export const runSchema = z
     maxEstimatedRunCostUsd: z.number().min(1).max(100),
   })
   .superRefine((run, ctx) => {
+    if (run.selectedBusinessId && run.maxSitesToBuild !== 1)
+      ctx.addIssue({
+        code: "custom",
+        path: ["maxSitesToBuild"],
+        message: "A selected business run builds exactly one site",
+      });
     if (
       run.requireEmailAndPhone &&
       (run.maxRealEmails < 1 || run.maxSalesTasks < 1)

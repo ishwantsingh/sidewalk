@@ -432,3 +432,92 @@ it("never replays an existing site during a prebuild retry", async () => {
     "Cannot retry a business after site creation",
   );
 });
+
+describe("explicit business selection", () => {
+  async function selectedSetup() {
+    const brief = await f.research();
+    f.research.mockClear();
+    const business = {
+      id: "selected-business",
+      run_id: "prior-run",
+      brief,
+      state: "REJECTED",
+    };
+    const audit = {
+      score: 51,
+      classification: "GOOD_WEBSITE",
+      defects: ["Mobile overflow", "Missing metadata"],
+    };
+    f.rows.mockImplementation(async (table) => {
+      if (table === "businesses") return [business];
+      if (table === "audits") return [audit];
+      if (table === "opportunities")
+        return [{ expected_contribution: 8, priority: 40, quoted_price: 199 }];
+      return [];
+    });
+    return { business, audit };
+  }
+  it("builds a deliberately selected prospect without changing its actual audit or rerunning discovery", async () => {
+    const { audit } = await selectedSetup();
+    await runPipeline({
+      id: "run-test",
+      params: {
+        ...params,
+        selectedBusinessId: "selected-business",
+        requireEmailAndPhone: true,
+      },
+    });
+    expect(f.research).not.toHaveBeenCalled();
+    expect(
+      f.update.mock.calls.filter(([table]) => table === "audits"),
+    ).toHaveLength(0);
+    expect(
+      f.reserve.mock.calls.some(([, { p_action }]) => p_action === "DISCOVERY"),
+    ).toBe(false);
+    expect(f.sendOutreach).toHaveBeenCalledWith(
+      "run-test",
+      "selected-business",
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      audit,
+    );
+    expect(f.queueSalesTask).toHaveBeenCalledOnce();
+    expect(f.event).toHaveBeenCalledWith(
+      "run-test",
+      "selected-business",
+      "BUSINESS_SELECTED",
+      expect.stringContaining("GOOD_WEBSITE, 51/100"),
+    );
+  });
+  it("refuses a selected business with an earlier ambiguous billable attempt", async () => {
+    await selectedSetup();
+    const implementation = f.rows.getMockImplementation()!;
+    f.rows.mockImplementation(async (...args) =>
+      args[0] === "events"
+        ? [{ action: "LOVABLE_BUILD" }]
+        : implementation(...args),
+    );
+    await expect(
+      runPipeline({
+        id: "run-test",
+        params: { ...params, selectedBusinessId: "selected-business" },
+      }),
+    ).rejects.toThrow("already has a build attempt");
+    expect(f.reserve).not.toHaveBeenCalled();
+    expect(f.call).not.toHaveBeenCalled();
+  });
+  it("retains the verified-identity gate for selected businesses", async () => {
+    const { business } = await selectedSetup();
+    business.brief.facts = business.brief.facts.filter(
+      (fact: any) => fact.label !== "Location",
+    );
+    await expect(
+      runPipeline({
+        id: "run-test",
+        params: { ...params, selectedBusinessId: "selected-business" },
+      }),
+    ).rejects.toThrow("verified identity");
+    expect(f.call).not.toHaveBeenCalled();
+  });
+});

@@ -48,7 +48,7 @@ try {
     viewport: { width: 1440, height: 1080 },
   });
   const errors: string[] = [];
-  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("pageerror", (error) => errors.push(error.stack ?? error.message));
   await page.goto(origin);
   await page.getByRole("heading", { name: "Overview", exact: true }).waitFor();
   // A complete configuration must show only API records, including a genuinely empty database.
@@ -75,8 +75,14 @@ try {
     if (route.request().method() === "POST") {
       const body = route.request().postDataJSON();
       assert.equal(body.area, "Brooklyn");
-      assert.equal(body.maxSalesTasks, 2);
-      assert.equal(body.maxRealEmails, 2);
+      assert.equal(body.maxSalesTasks, body.selectedBusinessId ? 1 : 2);
+      assert.equal(body.maxRealEmails, body.selectedBusinessId ? 1 : 2);
+      if (body.selectedBusinessId) {
+        assert.equal(body.selectedBusinessId, "live-business");
+        assert.equal(body.maxSitesToBuild, 1);
+        assert.equal(body.maxBusinesses, 1);
+        assert.deepEqual(body.types, ["cafe"]);
+      }
       assert.equal(body.requireEmailAndPhone, true);
       await route.fulfill({
         status: 201,
@@ -87,7 +93,7 @@ try {
         json: [
           {
             id: "live-run",
-            params: { area: "Brooklyn" },
+            params: { area: "Brooklyn", types: ["cafe"] },
             created_at: "2026-10-24T14:00:00Z",
           },
         ],
@@ -99,7 +105,13 @@ try {
     name: "Live business",
     category: "Cafe",
     state: "DISCOVERED",
-    audits: [],
+    audits: [
+      {
+        classification: "GOOD_WEBSITE",
+        score: 51,
+        defects: ["Overflow", "Metadata"],
+      },
+    ],
     opportunities: [],
     sites: [],
     products: [],
@@ -126,7 +138,23 @@ try {
     .getByRole("button", { name: "Live business", exact: true })
     .click();
   await page.getByRole("region", { name: "Live business" }).waitFor();
-  await page.keyboard.press("Escape");
+  await page
+    .getByRole("button", { name: "Build a concept for this business" })
+    .click();
+  await page.getByRole("dialog", { name: "Build selected business" }).waitFor();
+  assert.equal(
+    await page.getByRole("combobox", { name: "Business category" }).count(),
+    0,
+  );
+  assert.equal(
+    await page
+      .getByRole("spinbutton", { name: "Maximum site builds" })
+      .inputValue(),
+    "1",
+  );
+  await page.getByRole("button", { name: "Start run", exact: true }).click();
+  await page.waitForFunction(() => !document.querySelector('[role="dialog"]'));
+
   await page.getByRole("button", { name: "New run" }).click();
   await page
     .getByRole("textbox", { name: "Neighborhood or city" })

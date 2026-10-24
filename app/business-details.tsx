@@ -15,10 +15,12 @@ export function BusinessDetails({
   detail,
   onClose,
   onRetry,
+  onBuild,
 }: {
   detail: Row;
   onClose: () => void;
   onRetry: (id: string) => void;
+  onBuild?: (business: Row) => void;
 }) {
   const audit = latestAudit(detail);
   return (
@@ -81,6 +83,17 @@ export function BusinessDetails({
             </div>
           ))}
       </dl>
+      {onBuild && !detail.sites?.length && audit && (
+        <div className="notice">
+          <p>
+            Explicit selection preserves this business’s real audit score.
+            Verified contacts and economics are checked before building.
+          </p>
+          <button className="secondary" onClick={() => onBuild(detail)}>
+            Build a concept for this business
+          </button>
+        </div>
+      )}
       <h3>Finished website</h3>
       {detail.sites[0] ? (
         <>
