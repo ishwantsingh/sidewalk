@@ -2,6 +2,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import demoData from "../data/dashboard-demo.json";
 import { summarize, dailyTotals, type Row } from "../lib/dashboard";
+import { BusinessMap } from "./business-map";
+import { BusinessDetails } from "./business-details";
+import { DEFAULT_AREA, latestAudit } from "../lib/map";
 import { RevenueChart, PipelineChart } from "./charts";
 const money = (n: number) =>
   new Intl.NumberFormat("en-US", {
@@ -43,7 +46,8 @@ export default function Dashboard() {
     [form, setForm] = useState(false),
     [loading, setLoading] = useState(false),
     [filter, setFilter] = useState("ALL"),
-    [search, setSearch] = useState("");
+    [search, setSearch] = useState(""),
+    [mapArea, setMapArea] = useState(DEFAULT_AREA);
   const mode = useRef<boolean | null>(null);
   const refresh = useCallback(async () => {
     try {
@@ -77,14 +81,26 @@ export default function Dashboard() {
     if (!detail || demo) return;
     const timer = setInterval(() => {
       void api(`businesses/${detail.id}`)
-        .then(setDetail)
+        .then((value) => {
+          if (activeBusiness.current === value.id) setDetail(value);
+        })
         .catch((e) => setError(e.message));
     }, 5000);
     return () => clearInterval(timer);
   }, [detail?.id, demo]);
+  useEffect(() => {
+    if (!detail) return;
+    const panel = document.querySelector<HTMLElement>(
+      ".map-layout > .inspector",
+    );
+    panel?.focus({ preventScroll: true });
+    const workspace = document.querySelector<HTMLElement>(".map-workspace");
+    if (workspace && workspace.getBoundingClientRect().bottom < 100)
+      workspace.scrollIntoView({ block: "start", behavior: "smooth" });
+  }, [detail?.id]);
   const dialogTrigger = useRef<HTMLElement | null>(null);
   useEffect(() => {
-    if (!form && !detail) return;
+    if (!form) return;
     dialogTrigger.current = document.activeElement as HTMLElement;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -99,7 +115,6 @@ export default function Dashboard() {
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         setForm(false);
-        setDetail(null);
       }
       if (e.key === "Tab") {
         const items = focusable(),
@@ -120,12 +135,34 @@ export default function Dashboard() {
       document.removeEventListener("keydown", handleKey);
       dialogTrigger.current?.focus();
     };
-  }, [form, !!detail]);
+  }, [form]);
+  const activeBusiness = useRef<string | null>(null);
+  const businessTrigger = useRef<HTMLElement | null>(null);
+  function closeBusiness() {
+    activeBusiness.current = null;
+    setDetail(null);
+    if (businessTrigger.current?.isConnected) businessTrigger.current.focus();
+    else
+      document.querySelector<HTMLButtonElement>(".map-legend button")?.focus();
+  }
+  useEffect(() => {
+    const close = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !form) closeBusiness();
+    };
+    document.addEventListener("keydown", close);
+    return () => document.removeEventListener("keydown", close);
+  }, [form]);
   function openBusiness(b: Row) {
+    activeBusiness.current = b.id;
+    businessTrigger.current = document.activeElement as HTMLElement;
+    const run = runs.find((r) => r.id === b.run_id);
+    if (run) setMapArea(run.params.area);
     if (demo) setDetail(b);
     else
       void api(`businesses/${b.id}`)
-        .then(setDetail)
+        .then((value) => {
+          if (activeBusiness.current === b.id) setDetail(value);
+        })
         .catch((e) => setError(e.message));
   }
   const scoped = businesses.filter(
@@ -135,7 +172,7 @@ export default function Dashboard() {
     .filter(
       (b) =>
         (!search || b.name.toLowerCase().includes(search.toLowerCase())) &&
-        (filter === "ALL" || b.audits?.[0]?.classification === filter),
+        (filter === "ALL" || latestAudit(b)?.classification === filter),
     )
     .sort(
       (a, b) =>
@@ -204,7 +241,12 @@ export default function Dashboard() {
           <select
             aria-label="Filter by run"
             value={selectedRun}
-            onChange={(e) => setSelectedRun(e.target.value)}
+            onChange={(e) => {
+              setSelectedRun(e.target.value);
+              const run = runs.find((r) => r.id === e.target.value);
+              if (run) setMapArea(run.params.area);
+              closeBusiness();
+            }}
           >
             <option value="">All runs</option>
             {runs.map((r) => (
@@ -227,6 +269,36 @@ export default function Dashboard() {
           <p className="loading">Loading dashboard…</p>
         ) : (
           <>
+            <BusinessMap
+              businesses={list}
+              runs={runs}
+              area={mapArea}
+              onAreaChange={(area) => {
+                setMapArea(area);
+                setSelectedRun("");
+                closeBusiness();
+              }}
+              demo={demo}
+              selectedId={detail?.id}
+              onSelect={openBusiness}
+              onNewRun={() => setForm(true)}
+            >
+              {detail && (
+                <BusinessDetails
+                  detail={detail}
+                  onClose={closeBusiness}
+                  onRetry={(id) =>
+                    void api(`orders/${id}/retry`, {})
+                      .then(() => api(`businesses/${detail.id}`))
+                      .then((value) => {
+                        if (activeBusiness.current === value.id)
+                          setDetail(value);
+                      })
+                      .catch((e) => setError(e.message))
+                  }
+                />
+              )}
+            </BusinessMap>
             <section className="metrics" aria-label="Agency metrics">
               {[
                 ["Revenue", money(summary.revenue)],
@@ -301,7 +373,7 @@ export default function Dashboard() {
                   </thead>
                   <tbody>
                     {list.map((b) => {
-                      const a = b.audits?.[0],
+                      const a = latestAudit(b),
                         o = b.opportunities?.[0];
                       return (
                         <tr key={b.id}>
@@ -409,6 +481,7 @@ export default function Dashboard() {
                 Neighborhood or city
                 <input
                   name="area"
+                  defaultValue={mapArea}
                   placeholder="Williamsburg, Brooklyn, NY"
                   required
                   minLength={3}
@@ -501,232 +574,6 @@ export default function Dashboard() {
                 {loading ? "Starting…" : "Start run"}
               </button>
             </form>
-          </section>
-        </div>
-      )}
-      {detail && (
-        <div
-          className="overlay inspector-overlay"
-          onClick={() => setDetail(null)}
-        >
-          <section
-            className="inspector"
-            role="dialog"
-            aria-modal="true"
-            aria-label={detail.name}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              className="close"
-              aria-label="Close detail"
-              onClick={() => setDetail(null)}
-            >
-              ×
-            </button>
-            <h2>{detail.name}</h2>
-            <p>
-              {detail.category}{" "}
-              <span className="stage">{label(detail.state)}</span>
-            </p>
-            {detail.failure_reason && (
-              <div className="notice error">
-                {detail.failure_stage}: {detail.failure_reason}
-              </div>
-            )}
-            <h3>Website audit</h3>
-            <p>
-              {label(detail.audits[0]?.classification)} ·{" "}
-              {detail.audits[0]?.score ?? "N/A"}
-              {detail.audits[0]?.score != null ? " / 100" : ""}
-            </p>
-            {detail.website_url && (
-              <a href={detail.website_url} target="_blank" rel="noreferrer">
-                Original website ↗
-              </a>
-            )}
-            {detail.audits[0]?.screenshot_url && (
-              <img
-                className="site-image"
-                alt="Actual original website audit screenshot"
-                src={detail.audits[0].screenshot_url}
-              />
-            )}
-            <ul>
-              {detail.audits[0]?.defects?.map((d: string) => (
-                <li key={d}>{d}</li>
-              ))}
-            </ul>
-            <h3>Economics</h3>
-            <p className="muted">
-              Explicit conversion heuristic, not a trained prediction. Price is
-              a hypothesis; production spending is estimated.
-            </p>
-            <dl>
-              {Object.entries(detail.opportunities[0] ?? {})
-                .filter(([key]) => !["id", "business_id"].includes(key))
-                .map(([key, value]) => (
-                  <div key={key}>
-                    <dt>{label(key)}</dt>
-                    <dd>
-                      {key === "purchase_probability"
-                        ? `${(Number(value) * 100).toFixed(1)}%`
-                        : Number(value).toFixed(2)}
-                    </dd>
-                  </div>
-                ))}
-            </dl>
-            <h3>Finished website</h3>
-            {detail.sites[0] ? (
-              <>
-                <p>
-                  QA: {detail.sites[0].qa_status} · ZIP:{" "}
-                  {detail.sites[0].zip_path ? "Build verified" : "Not exported"}
-                </p>
-                {detail.sites[0].screenshot_url && (
-                  <img
-                    className="site-image"
-                    alt="Actual generated site screenshot"
-                    src={detail.sites[0].screenshot_url}
-                  />
-                )}
-                {detail.sites[0].preview_url && (
-                  <a
-                    href={detail.sites[0].preview_url}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Open unofficial concept ↗
-                  </a>
-                )}
-                {detail.products[0]?.storefront_url && (
-                  <p>
-                    <a
-                      href={detail.products[0].storefront_url}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Exact Whop product ↗
-                    </a>
-                  </p>
-                )}
-                <small className="checksum">
-                  SHA-256: {detail.sites[0].checksum ?? "Pending export"}
-                </small>
-              </>
-            ) : (
-              <p className="muted">No site generated.</p>
-            )}
-            <h3>Sales & delivery</h3>
-            <p>
-              {detail.phone ?? "No sourced business phone"}
-              <small>{detail.phone_source}</small>
-            </p>
-            <p>
-              {detail.email ?? "No sourced business email"}
-              <small>{detail.email_source}</small>
-            </p>
-            {detail.emails?.map((email: Row) => (
-              <div className="notice" key={email.id}>
-                <p>
-                  Sales email: {label(email.status)} · {email.address}
-                </p>
-                {email.provider_message_id && (
-                  <small>Provider: {email.provider_message_id}</small>
-                )}
-                {email.error && <p className="error">{email.error}</p>}
-                {email.subject && (
-                  <details>
-                    <summary>{email.subject}</summary>
-                    <p style={{ whiteSpace: "pre-wrap" }}>{email.body}</p>
-                  </details>
-                )}
-              </div>
-            ))}
-            {detail.sales_tasks?.length ? (
-              detail.sales_tasks.map((task: Row) => (
-                <div className="notice" key={task.id}>
-                  <p>
-                    Terac: {label(task.status)}
-                    {task.terac_opportunity_id
-                      ? ` · ${task.terac_opportunity_id}`
-                      : ""}
-                  </p>
-                  <p>
-                    Sales budget: {money(Number(task.max_cost_usd))}
-                    {task.quoted_cost_usd != null
-                      ? ` · Quote: ${money(Number(task.quoted_cost_usd))}`
-                      : ""}
-                  </p>
-                  {task.error && <p className="error">{task.error}</p>}
-                  {task.report && (
-                    <>
-                      <p>
-                        Call outcome: {label(task.report.outcome)} ·
-                        self-reported
-                      </p>
-                      <p>{task.report.notes}</p>
-                    </>
-                  )}
-                  <small>Only a verified Whop payment confirms a sale.</small>
-                </div>
-              ))
-            ) : (
-              <p>No salesperson assigned.</p>
-            )}
-            {detail.orders.map((o: Row) => (
-              <div className="notice" key={o.id}>
-                <p>
-                  {money(o.amount)} · {o.buyer_email} ·{" "}
-                  {label(o.delivery_state)}
-                  {o.internal ? " · internal verification" : ""}
-                </p>
-                {o.error && <p className="error">{o.error}</p>}
-                {(o.delivery_state === "EMAIL_FAILED" ||
-                  (o.delivery_state === "DELIVERED" &&
-                    new Date(o.download_expires_at).getTime() <=
-                      Date.now())) && (
-                  <button
-                    className="secondary"
-                    onClick={() =>
-                      void api(`orders/${o.id}/retry`, {})
-                        .then(() =>
-                          api(`businesses/${detail.id}`).then(setDetail),
-                        )
-                        .catch((e) => setError(e.message))
-                    }
-                  >
-                    {o.delivery_state === "DELIVERED"
-                      ? "Renew download link"
-                      : "Retry ZIP delivery"}
-                  </button>
-                )}
-              </div>
-            ))}
-            <h3>Verified facts</h3>
-            {detail.brief?.facts.map((f: Row, i: number) => (
-              <p key={i}>
-                <b>{f.label}:</b> {f.value}
-                <small>
-                  <a href={f.source} target="_blank" rel="noreferrer">
-                    Source ↗
-                  </a>{" "}
-                  · {f.confidence} confidence
-                </small>
-              </p>
-            ))}
-            <h3>Timeline</h3>
-            {detail.events
-              .sort((a: Row, b: Row) =>
-                a.created_at.localeCompare(b.created_at),
-              )
-              .map((e: Row) => (
-                <div className="detail-event" key={e.id}>
-                  <small>
-                    {time(e.created_at)} · {label(e.action)}
-                  </small>
-                  <p>{e.reason}</p>
-                </div>
-              ))}
           </section>
         </div>
       )}

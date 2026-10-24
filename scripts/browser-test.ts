@@ -53,6 +53,76 @@ try {
   await page.getByRole("heading", { name: "Overview", exact: true }).waitFor();
   await page.getByText("Demo data", { exact: true }).waitFor();
   assert.equal(await page.locator("tbody tr").count(), 12);
+  const map = page.getByRole("region", { name: "Business discovery map" });
+  await map.getByRole("combobox", { name: "Map neighborhood" }).waitFor();
+  assert.equal(
+    await map.getByRole("combobox", { name: "Map neighborhood" }).inputValue(),
+    "Williamsburg, Brooklyn",
+  );
+  assert.equal(await map.locator(".sample-marker").count(), 6);
+  assert.equal(
+    await map.locator('.sample-marker[aria-label$="Good website"]').count(),
+    1,
+  );
+  assert.equal(
+    await map.locator('.sample-marker[aria-label$="Poor website"]').count(),
+    2,
+  );
+  assert.equal(
+    await map.locator('.sample-marker[aria-label$="No website"]').count(),
+    3,
+  );
+  await map
+    .getByRole("button", { name: "Sunday Coffee · No website", exact: true })
+    .click();
+  await map
+    .getByRole("region", { name: "Sunday Coffee", exact: true })
+    .waitFor();
+  assert.equal(await page.evaluate(() => document.body.style.overflow), "");
+  await map
+    .getByRole("button", { name: "Wythe Barber · Good website", exact: true })
+    .click();
+  await map
+    .getByRole("region", { name: "Wythe Barber", exact: true })
+    .waitFor();
+  await mkdir("artifacts", { recursive: true });
+  await page.screenshot({ path: "artifacts/map-inspector-desktop.png" });
+  await page.setViewportSize({ width: 375, height: 844 });
+  assert(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+    "Map inspector overflows mobile",
+  );
+  await page.screenshot({
+    path: "artifacts/map-inspector-mobile.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 1440, height: 1080 });
+  await map.getByRole("button", { name: "Close detail" }).click();
+  await map.getByRole("button", { name: /^Good website/ }).click();
+  assert.equal(await map.locator(".sample-marker").count(), 1);
+  await map.getByRole("button", { name: /^All / }).click();
+  await map
+    .getByRole("combobox", { name: "Map neighborhood" })
+    .selectOption("Greenpoint, Brooklyn");
+  assert.equal(await map.locator(".sample-marker").count(), 6);
+  assert.equal(
+    await map.locator('.sample-marker[aria-label$="Needs review"]').count(),
+    1,
+  );
+  await map.getByRole("button", { name: "Search this area" }).click();
+  assert.equal(
+    await page
+      .getByRole("textbox", { name: "Neighborhood or city" })
+      .inputValue(),
+    "Greenpoint, Brooklyn",
+  );
+  await page.keyboard.press("Escape");
+  await map
+    .getByRole("combobox", { name: "Map neighborhood" })
+    .selectOption("Williamsburg, Brooklyn");
+
   assert.equal(
     await page.getByRole("img", { name: /Daily revenue/ }).count(),
     1,
@@ -80,7 +150,11 @@ try {
   assert.equal(await page.locator("aside").count(), 0);
   assert.equal(await page.locator(".eyebrow, .breadcrumb, .rail").count(), 0);
   const colors = await page.evaluate(() =>
-    Array.from(document.querySelectorAll("body *"))
+    Array.from(
+      document.querySelectorAll(
+        "body *:not(.map-workspace):not(.map-workspace *)",
+      ),
+    )
       .flatMap((el) => {
         const style = getComputedStyle(el);
         return [
@@ -105,7 +179,7 @@ try {
   await page
     .getByRole("button", { name: "Sunday Coffee", exact: true })
     .click();
-  await page.getByRole("dialog", { name: "Sunday Coffee" }).waitFor();
+  await page.getByRole("region", { name: "Sunday Coffee" }).waitFor();
   await page.getByRole("heading", { name: "Economics", exact: true }).waitFor();
   await page.keyboard.press("Escape");
   assert(
@@ -221,7 +295,7 @@ try {
   await page
     .getByRole("button", { name: "Live business", exact: true })
     .click();
-  await page.getByRole("dialog", { name: "Live business" }).waitFor();
+  await page.getByRole("region", { name: "Live business" }).waitFor();
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "New run" }).click();
   await page
@@ -357,7 +431,7 @@ try {
     .waitFor();
   assert.equal(errors.length, 0, errors.join("\n"));
   console.log(
-    "PASS browser: JSON demo, grayscale, charts, search, filters, detail, keyboard, mobile, configuration gating, live empty state, fetch errors and salesperson handoff/report.",
+    "PASS browser: JSON demo, map statuses and inspector, neutral dashboard, charts, search, filters, detail, keyboard, mobile, configuration gating, live empty state, fetch errors and salesperson handoff/report.",
   );
 } finally {
   await browser?.close();

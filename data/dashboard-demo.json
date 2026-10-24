@@ -125,7 +125,11 @@
         {
           "status": "SENT"
         }
-      ]
+      ],
+      "demo_location": {
+        "lat": 40.7171,
+        "lng": -73.9604
+      }
     },
     {
       "id": "demo-business-2",
@@ -218,7 +222,11 @@
         {
           "status": "SENT"
         }
-      ]
+      ],
+      "demo_location": {
+        "lat": 40.7395,
+        "lng": -73.951
+      }
     },
     {
       "id": "demo-business-3",
@@ -292,7 +300,11 @@
       "phone": "+1 212 555 0102",
       "phone_source": "Demo contact",
       "sales_tasks": [],
-      "emails": []
+      "emails": [],
+      "demo_location": {
+        "lat": 40.7204,
+        "lng": -73.9555
+      }
     },
     {
       "id": "demo-business-4",
@@ -356,7 +368,11 @@
       "phone": "+1 212 555 0103",
       "phone_source": "Demo contact",
       "sales_tasks": [],
-      "emails": []
+      "emails": [],
+      "demo_location": {
+        "lat": 40.737,
+        "lng": -73.942
+      }
     },
     {
       "id": "demo-business-5",
@@ -413,7 +429,11 @@
       "phone": "+1 212 555 0104",
       "phone_source": "Demo contact",
       "sales_tasks": [],
-      "emails": []
+      "emails": [],
+      "demo_location": {
+        "lat": 40.7115,
+        "lng": -73.956
+      }
     },
     {
       "id": "demo-business-6",
@@ -519,7 +539,11 @@
         {
           "status": "SENT"
         }
-      ]
+      ],
+      "demo_location": {
+        "lat": 40.7339,
+        "lng": -73.9457
+      }
     },
     {
       "id": "demo-business-7",
@@ -612,7 +636,11 @@
         {
           "status": "SENT"
         }
-      ]
+      ],
+      "demo_location": {
+        "lat": 40.715,
+        "lng": -73.949
+      }
     },
     {
       "id": "demo-business-8",
@@ -669,7 +697,11 @@
       "phone": "+1 212 555 0107",
       "phone_source": "Demo contact",
       "sales_tasks": [],
-      "emails": []
+      "emails": [],
+      "demo_location": {
+        "lat": 40.729,
+        "lng": -73.952
+      }
     },
     {
       "id": "demo-business-9",
@@ -723,7 +755,11 @@
       "phone": "+1 212 555 0108",
       "phone_source": "Demo contact",
       "sales_tasks": [],
-      "emails": []
+      "emails": [],
+      "demo_location": {
+        "lat": 40.7228,
+        "lng": -73.96
+      }
     },
     {
       "id": "demo-business-10",
@@ -780,7 +816,11 @@
       "phone": "+1 212 555 0109",
       "phone_source": "Demo contact",
       "sales_tasks": [],
-      "emails": []
+      "emails": [],
+      "demo_location": {
+        "lat": 40.727,
+        "lng": -73.944
+      }
     },
     {
       "id": "demo-business-11",
@@ -837,7 +877,11 @@
       "phone": "+1 212 555 0110",
       "phone_source": "Demo contact",
       "sales_tasks": [],
-      "emails": []
+      "emails": [],
+      "demo_location": {
+        "lat": 40.7083,
+        "lng": -73.952
+      }
     },
     {
       "id": "demo-business-12",
@@ -894,7 +938,11 @@
       "phone": "+1 212 555 0111",
       "phone_source": "Demo contact",
       "sales_tasks": [],
-      "emails": []
+      "emails": [],
+      "demo_location": {
+        "lat": 40.723,
+        "lng": -73.956
+      }
     }
   ],
   "overview": {
