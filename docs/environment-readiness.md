@@ -2,6 +2,10 @@
 
 **Live demo run in progress; full end-to-end acceptance remains unverified.** The hosted demo fixes were deployed in `83b36fc`. The first authorized run (`f7851b0c-3cd2-4749-b045-3bc75463688c`) discovered 20 Google Places results. Live execution exposed an unsupported OpenAI `uri` schema format and PostgREST unique relations arriving as objects; both now have regression coverage. The research transport preserves local URL validation, and the dashboard API normalizes embedded relations to lists. A further live audit issue paired Node’s bundled Undici fetch with a different package dispatcher; safe requests now use matching package versions, verified against real business sites. Unreliable scores were invalidated before any build or outreach. The guarded prebuild retry refreshes research and audits in place, preserving history and spending. The corrected discovery run completed with no automatic matches. The user authorized explicit business selection for the demo; that UI preserves actual audit scores and the worker retains identity/contact/economics and prior-attempt gates. Selecting a newly started run also selects its map neighborhood.
 
+## Live execution findings
+
+The single selected Flower Cat project was created in Lovable. Its private preview redirects to login, so QA now publishes and waits for the actual public URL instead. The existing project was resumed without another generation or exceeding its original two-repair allowance. Public QA passed at https://flower-cat-greenpoint-cafe.lovable.app. Source export now accepts Lovable’s current TanStack Start app layout and text configuration, with stack-appropriate buyer instructions; Docker export and downstream sales steps are still in progress. No successful email or salesperson handoff is claimed yet.
+
 ## Verified
 
 - The hosted dashboard and configuration/runs/businesses/overview APIs pass `verify:deployment` at `https://sidewalkai.netlify.app`.
@@ -10,7 +14,7 @@
 - Docker, Playwright Chromium, Lovable OAuth, Terac authentication/contracts, Whop account access, OpenAI model lookup, Google Geocoding/Places, Exa and Resend checks pass.
 - `mail.rerout.com` is verified, the sender matches it, and the sender postal address is configured locally and in Netlify.
 - The strengthened Lovable preflight checks availability and argument binding for creation, repairs, message polling, deployment and paginated source reads. It never executes the write operations.
-- `npm run check` passes: route generation, type checking, **161 tests** and the production build. The browser suite passes, including the new dual-contact option and salesperson reporting.
+- `npm run check` passes: route generation, type checking, **169 tests** and the production build. The browser suite passes, including the new dual-contact option and salesperson reporting.
 - A separate two-second local recording test exported successfully to H.264 MP4. That technical test is not the requested three-minute demo.
 
 ## Before the real demo

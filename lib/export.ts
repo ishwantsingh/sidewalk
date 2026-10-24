@@ -12,6 +12,21 @@ import { db } from "./db";
 import { env } from "./config";
 import { z } from "zod";
 const exec = promisify(execFile);
+export function sourcePackage(source: { path: string; content: string }[]) {
+  const file = source.find((file) => file.path === "package.json");
+  if (!file || !source.some((file) => /^src\/.*\.[jt]sx?$/.test(file.path)))
+    throw new Error("Incomplete React source codebase");
+  const pkg = JSON.parse(file.content);
+  if (!pkg.scripts?.build || !pkg.dependencies?.react)
+    throw new Error("Missing React dependency or build command");
+  return pkg;
+}
+export function deploymentReadme(name: string, pkg: Record<string, any>) {
+  const deployment = pkg.dependencies?.["@tanstack/react-start"]
+    ? "This is a TanStack Start application with a server build. Keep the configured Vite/Nitro deployment target and deploy the server output together with its public assets; uploading only a static dist folder is insufficient. See https://nitro.build/deploy for the configured target's deployment instructions. Run npm run preview when the project provides that script to test the production build locally."
+    : "Deploy the generated dist directory to a static host. Run npm run preview if available to inspect the production build first.";
+  return `# ${name} website\n\nUnofficial concept, not affiliated with this business.\n\nRequires Node.js 22+. Run npm install, npm run dev for local preview, and npm run build for production. The source was built in an isolated Node 22 container without application secrets.\n\n${deployment}\n\nNo hosting service, domain transfer or account handoff is included. Verify business information and image licenses before publishing. Retain noindex and the unofficial notice until the business accepts the concept.\n`;
+}
 const sourcePageSchema = z.object({
   ref: z.string(),
   data: z.array(z.object({ path: z.string(), binary: z.boolean() })).max(100),
@@ -54,8 +69,10 @@ export async function readProjectSource(
       if (/\.(png|jpg|jpeg|gif|webp|ico|woff2?|ttf|pdf|zip)$/i.test(path))
         throw new Error(`Binary asset cannot be exported: ${path}`);
       if (
-        !/\.(tsx?|jsx?|json|html|css|svg|md|txt|ya?ml|mjs|cjs)$/.test(path) &&
-        path !== ".gitignore"
+        !/\.(tsx?|jsx?|jsonc?|html|css|svg|md|txt|ya?ml|mjs|cjs|toml)$/.test(
+          path,
+        ) &&
+        ![".gitignore", ".prettierignore", ".prettierrc"].includes(path)
       )
         throw new Error(`Unsupported export file: ${path}`);
       if (seenPaths.has(path))
@@ -123,14 +140,7 @@ export async function exportSite(
       await mkdir(dirname(join(dir, path)), { recursive: true });
       await writeFile(join(dir, path), content);
     }
-    if (
-      !paths.includes("package.json") ||
-      !paths.includes("index.html") ||
-      !paths.some((p) => /^src\/.*\.[jt]sx?$/.test(p))
-    )
-      throw new Error("Incomplete React/Vite codebase");
-    const pkg = JSON.parse(await readFile(join(dir, "package.json"), "utf8"));
-    if (!pkg.scripts?.build) throw new Error("Missing build command");
+    const pkg = sourcePackage(source);
     // Generated code is untrusted. Docker contains lifecycle scripts, without host secrets or sockets.
     const { stdout, stderr } = await exec(
       "docker",
@@ -153,10 +163,7 @@ export async function exportSite(
       ],
       { timeout: 240000, maxBuffer: 4 * 1024 * 1024 },
     );
-    await writeFile(
-      join(dir, "README.md"),
-      `# ${name} website\n\nUnofficial concept, not affiliated with this business.\n\nRequires Node.js 22+. Run npm install, npm run dev for local preview, and npm run build for production. Run npm run preview if available to inspect the build. Deploy the generated dist directory to any static host. No backend, account handoff, hosting service or domain transfer is included. Verify business information and image licenses before publishing. Retain noindex and the unofficial notice until the business accepts the concept.\n`,
-    );
+    await writeFile(join(dir, "README.md"), deploymentReadme(name, pkg));
     const zip = join(tmpdir(), `${siteId}.zip`);
     try {
       await new Promise<void>((resolve, reject) => {

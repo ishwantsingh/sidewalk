@@ -48,6 +48,14 @@ export async function inspect(
       timeout: 45000,
     });
     if (!response?.ok()) throw new Error("Website unavailable");
+    if (
+      concept &&
+      new URL(page.url()).hostname === "lovable.dev" &&
+      new URL(page.url()).pathname.startsWith("/login")
+    )
+      throw new Error(
+        "Lovable preview requires login; QA must inspect the published public concept URL",
+      );
     const metrics = await page.evaluate(() => ({
       overflow: document.documentElement.scrollWidth > innerWidth + 3,
       title: document.title,

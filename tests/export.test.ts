@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { readProjectSource } from "../lib/export";
+import {
+  sourcePackage,
+  deploymentReadme,
+  readProjectSource,
+} from "../lib/export";
 
 const ref = "a".repeat(40);
 const page = (paths: string[], next: string | null = null) => ({
@@ -124,4 +128,43 @@ describe("complete Lovable source export", () => {
     ).rejects.toThrow("commit SHA");
     expect(call).not.toHaveBeenCalled();
   });
+});
+
+it("exports current TanStack app source and text configs without requiring a legacy index.html", async () => {
+  const paths = [
+    "package.json",
+    "src/routes/index.tsx",
+    "src/server.ts",
+    "vite.config.ts",
+    ".prettierrc",
+    ".prettierignore",
+    "bunfig.toml",
+    "wrangler.jsonc",
+  ];
+  const pkg = {
+    dependencies: { react: "19", "@tanstack/react-start": "1" },
+    scripts: { build: "vite build" },
+  };
+  const call = vi.fn(async (name: string, args: Record<string, unknown>) =>
+    name === "list_files"
+      ? page(paths)
+      : {
+          content: args.path === "package.json" ? JSON.stringify(pkg) : "text",
+        },
+  );
+  const source = await readProjectSource({ call }, "project-1", ref);
+  expect(sourcePackage(source)).toEqual(pkg);
+  const readme = deploymentReadme("Business", pkg);
+  expect(readme).toContain("server output together with its public assets");
+  expect(readme).not.toContain(
+    "Deploy the generated dist directory to a static host",
+  );
+});
+it("requires a real React package and build command", () => {
+  expect(() =>
+    sourcePackage([
+      { path: "package.json", content: '{"scripts":{"build":"echo okay"}}' },
+      { path: "src/index.tsx", content: "" },
+    ]),
+  ).toThrow("React dependency");
 });

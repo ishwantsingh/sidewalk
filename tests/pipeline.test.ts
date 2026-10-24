@@ -38,6 +38,9 @@ vi.mock("../lib/research", () => ({
   ],
   research: f.research,
 }));
+vi.mock("../lib/publication", () => ({
+  waitForPublication: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock("../lib/audit", () => ({ inspect: f.inspect }));
 vi.mock("../lib/export", () => ({ exportSite: f.exportSite }));
 vi.mock("../lib/commerce", () => ({ listProduct: f.listProduct }));
@@ -185,8 +188,7 @@ describe("orchestrator safety gates with isolated provider adapters", () => {
     await runPipeline({ id: "run-test", params });
     expect(f.waitForBuild).toHaveBeenCalledTimes(2);
     expect(f.inspect.mock.calls.map(([url]) => url)).toEqual([
-      "https://initial.example",
-      "https://repaired.example",
+      "https://published.example",
       "https://published.example",
     ]);
     expect(f.exportSite).toHaveBeenCalledWith(
@@ -519,5 +521,87 @@ describe("explicit business selection", () => {
       }),
     ).rejects.toThrow("verified identity");
     expect(f.call).not.toHaveBeenCalled();
+  });
+});
+
+describe("existing generated-site recovery", () => {
+  async function recoverySetup(extraHistory: string[] = []) {
+    const brief = await f.research();
+    f.rows.mockImplementation(async (table) => {
+      if (table === "businesses")
+        return [{ id: "existing", state: "FAILED", brief }];
+      if (table === "audits")
+        return [
+          {
+            score: 51,
+            classification: "GOOD_WEBSITE",
+            defects: ["overflow", "metadata"],
+          },
+        ];
+      if (table === "opportunities")
+        return [{ expected_contribution: 8, priority: 40, quoted_price: 199 }];
+      if (table === "sites")
+        return [
+          { id: "site-existing", lovable_project_id: "project-existing" },
+        ];
+      if (table === "events")
+        return [
+          "LOVABLE_BUILD",
+          "LOVABLE_REPAIR",
+          "LOVABLE_REPAIR",
+          ...extraHistory,
+        ].map((action) => ({ action }));
+      return [];
+    });
+  }
+  it("publishes and audits the same completed project without creating another site or generation", async () => {
+    await recoverySetup();
+    await runPipeline(
+      { id: "run-test", params: { ...params, selectedBusinessId: "existing" } },
+      { resumeExistingSite: true },
+    );
+    expect(f.waitForBuild).toHaveBeenCalledWith("project-existing", {
+      status: "completed",
+    });
+    expect(f.call.mock.calls.map(([name]) => name)).toEqual(["deploy_project"]);
+    expect(f.inspect.mock.calls.map(([url]) => url)).toEqual([
+      "https://published.example",
+    ]);
+    expect(f.exportSite).toHaveBeenCalledWith(
+      expect.anything(),
+      "project-existing",
+      "site-existing",
+      "Test Venue",
+      "a".repeat(40),
+    );
+    expect(f.insert.mock.calls.some(([table]) => table === "sites")).toBe(
+      false,
+    );
+    expect(f.sendOutreach).toHaveBeenCalledOnce();
+  });
+  it("does not exceed the original repair limit during recovery", async () => {
+    await recoverySetup();
+    f.inspect.mockResolvedValue({ passed: false, defects: ["layout"] });
+    await runPipeline(
+      { id: "run-test", params: { ...params, selectedBusinessId: "existing" } },
+      { resumeExistingSite: true },
+    );
+    expect(f.call.mock.calls.map(([name]) => name)).toEqual(["deploy_project"]);
+    expect(f.exportSite).not.toHaveBeenCalled();
+    expect(f.sendOutreach).not.toHaveBeenCalled();
+  });
+  it("refuses an ambiguous earlier product creation even when no product row exists", async () => {
+    await recoverySetup(["WHOP_CREATE_ATTEMPT"]);
+    await expect(
+      runPipeline(
+        {
+          id: "run-test",
+          params: { ...params, selectedBusinessId: "existing" },
+        },
+        { resumeExistingSite: true },
+      ),
+    ).rejects.toThrow("before any product");
+    expect(f.call).not.toHaveBeenCalled();
+    expect(f.sendOutreach).not.toHaveBeenCalled();
   });
 });
