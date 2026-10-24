@@ -27,10 +27,16 @@ export function teracArguments(tool: Tool, values: Record<string, unknown>) {
 export function teracResult(
   response: Record<string, any>,
 ): Record<string, any> {
-  if (response.isError)
+  if (response.isError) {
+    const detail = (response.content ?? [])
+      .filter((c: any) => c.type === "text")
+      .map((c: any) => c.text)
+      .join(" ")
+      .slice(0, 500);
     throw new Error(
-      "Terac rejected the operation; inspect its dashboard before retrying",
+      `Terac rejected the operation; inspect its dashboard before retrying${detail ? `: ${detail}` : ""}`,
     );
+  }
   let result = response.structuredContent;
   if (!result) {
     const text = (response.content ?? [])
@@ -80,7 +86,8 @@ export class Terac {
       await this.client.callTool(
         { name, arguments: teracArguments(tool, values) },
         undefined,
-        { timeout: 30000 },
+        // Draft creation prices the audience server-side and can exceed 30s.
+        { timeout: name === "terac_create_opportunity" ? 120000 : 30000 },
       ),
     );
   }

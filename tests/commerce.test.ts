@@ -4,6 +4,9 @@ it("uses the unique product route inside the seller storefront", () => {
   expect(productPageUrl("sidewalk-ai", "maple-cafe-website")).toBe(
     "https://whop.com/sidewalk-ai/maple-cafe-website/",
   );
+  expect(productPageUrl("biz_3rKshd9BdONT5t", "cafe-website")).toBe(
+    "https://whop.com/biz_3rKshd9BdONT5t/cafe-website/",
+  );
   expect(() => productPageUrl("../escape", "cafe")).toThrow();
 });
 it("checks the actual visible price without a regex currency-escaping error", () => {

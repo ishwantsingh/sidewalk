@@ -605,3 +605,139 @@ describe("existing generated-site recovery", () => {
     expect(f.sendOutreach).not.toHaveBeenCalled();
   });
 });
+
+it("reuses QA only for the unchanged recorded source revision and rechecks public availability", async () => {
+  const brief = await f.research();
+  f.rows.mockImplementation(async (table) => {
+    if (table === "businesses")
+      return [{ id: "existing", state: "FAILED", brief }];
+    if (table === "audits")
+      return [
+        {
+          score: 51,
+          classification: "GOOD_WEBSITE",
+          defects: ["overflow", "metadata"],
+        },
+      ];
+    if (table === "opportunities")
+      return [{ expected_contribution: 8, priority: 40, quoted_price: 199 }];
+    if (table === "sites")
+      return [
+        {
+          id: "site-existing",
+          lovable_project_id: "project-existing",
+          qa_status: "PASSED",
+          screenshot_url: "https://assets.example/qa.png",
+          preview_url: "https://published.example",
+        },
+      ];
+    if (table === "events")
+      return [
+        {
+          action: "LOVABLE_BUILD_READY",
+          reason: "Build completed at commit " + "a".repeat(40),
+          created_at: "2026-10-24T10:00:00Z",
+        },
+        {
+          action: "PREVIEW_READY",
+          reason: "Passed",
+          created_at: "2026-10-24T10:01:00Z",
+        },
+      ];
+    return [];
+  });
+  await runPipeline(
+    { id: "run-test", params: { ...params, selectedBusinessId: "existing" } },
+    { resumeExistingSite: true },
+  );
+  expect(f.inspect).not.toHaveBeenCalled();
+  expect(f.call).not.toHaveBeenCalled();
+  expect(
+    f.reserve.mock.calls.some(
+      ([, { p_action }]) => p_action === "PUBLISHED_QA",
+    ),
+  ).toBe(false);
+  expect(f.sendOutreach).toHaveBeenCalledOnce();
+});
+
+describe("recovery after a rejected Whop listing", () => {
+  async function setup(
+    clearedAt: string,
+    clearedBy = "WHOP_ATTEMPT_ABSENT",
+    products: Record<string, unknown>[] = [],
+  ) {
+    const brief = await f.research();
+    f.rows.mockImplementation(async (table) => {
+      if (table === "businesses")
+        return [{ id: "existing", state: "FAILED", brief }];
+      if (table === "audits")
+        return [
+          {
+            score: 51,
+            classification: "GOOD_WEBSITE",
+            defects: ["overflow", "metadata"],
+          },
+        ];
+      if (table === "opportunities")
+        return [{ expected_contribution: 8, priority: 40, quoted_price: 199 }];
+      if (table === "sites")
+        return [
+          {
+            id: "site-existing",
+            lovable_project_id: "project-existing",
+            qa_status: "PASSED",
+            screenshot_url: "https://assets.example/qa.png",
+            preview_url: "https://published.example",
+            zip_path: "site-existing/test-venue-website.zip",
+            checksum: "b".repeat(64),
+          },
+        ];
+      if (table === "products") return products;
+      if (table === "events")
+        return [
+          ["LOVABLE_BUILD_READY", "2026-10-24T10:00:00Z"],
+          ["PREVIEW_READY", "2026-10-24T10:01:00Z"],
+          ["ZIP_READY", "2026-10-24T10:02:00Z"],
+          ["WHOP_CREATE_ATTEMPT", "2026-10-24T10:03:00Z"],
+          [clearedBy, clearedAt],
+        ].map(([action, created_at]) => ({
+          action,
+          created_at,
+          reason: "Build completed at commit " + "a".repeat(40),
+        }));
+      return [];
+    });
+  }
+  const resume = () =>
+    runPipeline(
+      { id: "run-test", params: { ...params, selectedBusinessId: "existing" } },
+      { resumeExistingSite: true },
+    );
+  it("retries the listing with the verified ZIP once the provider shows no product", async () => {
+    await setup("2026-10-24T10:04:00Z");
+    await resume();
+    expect(f.exportSite).not.toHaveBeenCalled();
+    expect(f.listProduct).toHaveBeenCalledOnce();
+    expect(f.sendOutreach).toHaveBeenCalledOnce();
+  });
+  it("still refuses when the absence check predates the latest attempt", async () => {
+    await setup("2026-10-24T09:59:00Z");
+    await expect(resume()).rejects.toThrow("before any product");
+    expect(f.listProduct).not.toHaveBeenCalled();
+  });
+  it("completes its own unpublished listing in place", async () => {
+    await setup("2026-10-24T10:04:00Z", "WHOP_PARTIAL_RESUMABLE", [
+      { id: "product-row", whop_product_id: "prod_1", verified: false },
+    ]);
+    await resume();
+    expect(f.listProduct).toHaveBeenCalledOnce();
+    expect(f.sendOutreach).toHaveBeenCalledOnce();
+  });
+  it("refuses recovery once a verified listing exists", async () => {
+    await setup("2026-10-24T10:04:00Z", "WHOP_PARTIAL_RESUMABLE", [
+      { id: "product-row", whop_product_id: "prod_1", verified: true },
+    ]);
+    await expect(resume()).rejects.toThrow("Refusing recovery");
+    expect(f.listProduct).not.toHaveBeenCalled();
+  });
+});

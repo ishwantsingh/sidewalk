@@ -61,23 +61,33 @@ export async function runPipeline(
         business.state !== "FAILED" ||
         !sites[0]?.lovable_project_id ||
         history.some((entry) =>
-          [
-            "WHOP_CREATE_ATTEMPT",
-            "WHOP_LISTED",
-            "EMAIL_SENT",
-            "SALES_QUEUED",
-          ].includes(entry.action),
+          ["WHOP_LISTED", "EMAIL_SENT", "SALES_QUEUED"].includes(entry.action),
+        ) ||
+        // A failed Whop attempt is recoverable only once the provider was checked for its product.
+        history.some(
+          (entry) =>
+            entry.action === "WHOP_CREATE_ATTEMPT" &&
+            !history.some(
+              (cleared) =>
+                ["WHOP_ATTEMPT_ABSENT", "WHOP_PARTIAL_RESUMABLE"].includes(
+                  cleared.action,
+                ) && cleared.created_at > entry.created_at,
+            ),
         )
       )
         throw new Error(
           "Existing-site recovery is allowed only before any product or outreach attempt",
         );
-      const downstream = await Promise.all([
+      const [products, ...outreach] = await Promise.all([
         rows("products", "site_id", sites[0].id),
         rows("emails", "business_id", business.id),
         rows("sales_tasks", "business_id", business.id),
       ]);
-      if (downstream.some((records) => records.length))
+      // An unverified product is a listing whose publish failed; listProduct completes it in place.
+      if (
+        products.some((product) => product.verified) ||
+        outreach.some((records) => records.length)
+      )
         throw new Error(
           "Refusing recovery after product or outreach records exist",
         );
@@ -406,12 +416,14 @@ export async function runPipeline(
         project = await lovable.waitForBuild(projectId, created);
       }
       await update("sites", site.id, { preview_url: project.url });
-      await event(
-        id,
-        business.id,
-        "LOVABLE_BUILD_READY",
-        `Build completed at commit ${project.ref}: ${project.url}`,
-      );
+      if (!resumeExistingSite) {
+        await event(
+          id,
+          business.id,
+          "LOVABLE_BUILD_READY",
+          `Build completed at commit ${project.ref}: ${project.url}`,
+        );
+      }
       const publish = async () => {
         const deployed = await lovable.call("deploy_project", {
           project_id: projectId,
@@ -424,18 +436,50 @@ export async function runPipeline(
         await waitForPublication(url, brief.name);
         return url;
       };
-      // Lovable previews can require a login. Audit the actual public deployment.
-      let live = await publish();
-      await reserve(
-        id,
-        business.id,
-        "PUBLISHED_QA",
-        cost("COST_MODEL_RESEARCH_USD"),
-      );
-      let qa = await inspect(live, brief.name, true, brief);
-      const usedRepairs = (
-        await rows("events", "business_id", business.id)
-      ).filter((entry) => entry.action === "LOVABLE_REPAIR").length;
+      const stageHistory = await rows("events", "business_id", business.id);
+      const latest = (action: string) =>
+        stageHistory
+          .filter((entry) => entry.action === action)
+          .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+      const built = latest("LOVABLE_BUILD_READY"),
+        passed = latest("PREVIEW_READY");
+      const reuseQa =
+        resumeExistingSite &&
+        site.qa_status === "PASSED" &&
+        site.screenshot_url &&
+        built?.reason.includes(project.ref) &&
+        passed?.created_at >= built.created_at &&
+        typeof site.preview_url === "string" &&
+        !site.preview_url.includes("id-preview--");
+      let live: string,
+        qa: Pick<
+          Awaited<ReturnType<typeof inspect>>,
+          "passed" | "defects" | "screenshot_url"
+        >;
+      if (reuseQa) {
+        live = site.preview_url;
+        await waitForPublication(live, brief.name);
+        qa = { passed: true, defects: [], screenshot_url: site.screenshot_url };
+        await event(
+          id,
+          business.id,
+          "PUBLISHED_QA_REUSED",
+          `Reusing passed QA for unchanged commit ${project.ref}; public availability checked again.`,
+        );
+      } else {
+        // Lovable previews can require a login. Audit the actual public deployment.
+        live = await publish();
+        await reserve(
+          id,
+          business.id,
+          "PUBLISHED_QA",
+          cost("COST_MODEL_RESEARCH_USD"),
+        );
+        qa = await inspect(live, brief.name, true, brief);
+      }
+      const usedRepairs = stageHistory.filter(
+        (entry) => entry.action === "LOVABLE_REPAIR",
+      ).length;
       for (
         let attempt = usedRepairs;
         !qa.passed && attempt < p.maxLovableRepairAttempts;
@@ -478,21 +522,39 @@ export async function runPipeline(
         `Published site passed mobile, links, disclaimer, name, and noindex checks: ${live}`,
       );
       stage = "ZIP_READY";
-      const zip = await exportSite(
-        lovable,
-        projectId,
-        site.id,
-        brief.name,
-        project.ref,
-      );
-      await update("sites", site.id, zip);
+      const exported = latest("ZIP_READY");
+      let zip: { zip_path: string; checksum: string };
+      if (
+        resumeExistingSite &&
+        site.zip_path &&
+        site.checksum &&
+        built?.reason.includes(project.ref) &&
+        exported?.created_at >= built.created_at
+      ) {
+        zip = { zip_path: site.zip_path, checksum: site.checksum };
+        await event(
+          id,
+          business.id,
+          "ZIP_REUSED",
+          `Reusing verified source ZIP for unchanged commit ${project.ref}; SHA-256 ${zip.checksum}`,
+        );
+      } else {
+        zip = await exportSite(
+          lovable,
+          projectId,
+          site.id,
+          brief.name,
+          project.ref,
+        );
+        await update("sites", site.id, zip);
+        await event(
+          id,
+          business.id,
+          stage,
+          `Clean isolated npm install/build passed; SHA-256 ${zip.checksum}`,
+        );
+      }
       await update("businesses", business.id, { state: stage });
-      await event(
-        id,
-        business.id,
-        stage,
-        `Clean isolated npm install/build passed; SHA-256 ${zip.checksum}`,
-      );
       stage = "WHOP_LISTED";
       site = {
         ...site,

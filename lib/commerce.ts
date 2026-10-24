@@ -3,7 +3,11 @@ import { chromium } from "playwright";
 import { env } from "./config";
 import { slug } from "./domain";
 import { request } from "./http";
-import { insert, update } from "./db";
+import { insert, rows, update } from "./db";
+import { createHash } from "node:crypto";
+// Same request retries replay; a changed request body gets a fresh key instead of a provider mismatch.
+const requestKey = (step: string, siteId: string, body: unknown) =>
+  `whop-${step}-${siteId}-${createHash("sha256").update(JSON.stringify(body)).digest("hex").slice(0, 16)}`;
 export async function listProduct(
   site: {
     id: string;
@@ -14,61 +18,97 @@ export async function listProduct(
   name: string,
   amount: number,
 ) {
-  const client = whop(`product-${site.id}`);
-  const file = await client.files.create({
-    filename: `${slug(name)}.png`,
-    visibility: "public",
-  });
-  if (!file.upload_url) throw new Error("Whop returned no image upload URL");
-  const bytes = await (await request(site.screenshot_url)).arrayBuffer();
-  await request(file.upload_url, {
-    method: "PUT",
-    headers: Object.fromEntries(
-      Object.entries(file.upload_headers ?? {}).map(([key, value]) => [
-        key,
-        String(value),
-      ]),
-    ),
-    body: bytes,
-  });
-  let ready = false;
-  for (let n = 0; n < 20; n++) {
-    const check = await client.files.retrieve({ id: file.id });
-    if (check.upload_status === "ready") {
-      ready = true;
-      break;
+  const client = whop();
+  const headline = `Unofficial website concept for ${name}`.slice(0, 80);
+  // A listing whose publish failed is completed in place, never duplicated.
+  const partial = (await rows("products", "site_id", site.id)).find(
+    (row) => !row.verified,
+  );
+  let product: { id: string; route: string };
+  let saved: Record<string, any>;
+  let plan: { id: string; purchase_url: string } | undefined;
+  if (partial) {
+    const existing = await client.products.retrieve({
+      id: partial.whop_product_id,
+    });
+    if (existing.metadata?.siteId !== site.id)
+      throw new Error("Recorded Whop product belongs to another site");
+    product = await client.products.update({ id: existing.id, headline });
+    saved = partial;
+    for await (const variant of await client.variants.list({
+      account_id: env("WHOP_ACCOUNT_ID"),
+      product_ids: existing.id,
+    }))
+      if (variant.metadata?.siteId === site.id) plan = variant;
+  } else {
+    const fileRequest = {
+      filename: `${slug(name)}.png`,
+      visibility: "public" as const,
+    };
+    const file = await client.files.create(fileRequest, {
+      idempotencyKey: requestKey("file", site.id, fileRequest),
+    });
+    if (!file.upload_url) throw new Error("Whop returned no image upload URL");
+    const uploaded =
+      (await client.files.retrieve({ id: file.id })).upload_status === "ready";
+    const bytes = await (await request(site.screenshot_url)).arrayBuffer();
+    if (!uploaded)
+      await request(file.upload_url, {
+        method: "PUT",
+        headers: Object.fromEntries(
+          Object.entries(file.upload_headers ?? {}).map(([key, value]) => [
+            key,
+            String(value),
+          ]),
+        ),
+        body: bytes,
+      });
+    let ready = false;
+    for (let n = 0; n < 20; n++) {
+      const check = await client.files.retrieve({ id: file.id });
+      if (check.upload_status === "ready") {
+        ready = true;
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 2000));
     }
-    await new Promise((r) => setTimeout(r, 2000));
+    if (!ready) throw new Error("Whop image upload did not become ready");
+    const productRequest = {
+      account_id: env("WHOP_ACCOUNT_ID"),
+      title: `Website for ${name}`.slice(0, 80),
+      headline,
+      description: `Unofficial responsive website concept for ${name}. One-time purchase of React website source ZIP and deployment instructions. No hosting or domain service. Preview: ${site.preview_url}`,
+      route: `${slug(name)}-website-${site.id.slice(0, 8)}`,
+      gallery_images: [{ id: file.id }],
+      metadata: { siteId: site.id, leadId: site.business_id },
+      visibility: "visible" as const,
+    };
+    product = await client.products.create(productRequest, {
+      idempotencyKey: requestKey("product", site.id, productRequest),
+    });
+    saved = await insert("products", {
+      site_id: site.id,
+      whop_product_id: product.id,
+      amount,
+    });
   }
-  if (!ready) throw new Error("Whop image upload did not become ready");
-  const route = `${slug(name)}-website-${site.id.slice(0, 8)}`;
-  const product = await client.products.create({
-    account_id: env("WHOP_ACCOUNT_ID"),
-    title: `Website for ${name}`,
-    description: `Unofficial responsive website concept for ${name}. One-time purchase of React website source ZIP and deployment instructions. No hosting or domain service. Preview: ${site.preview_url}`,
-    route,
-    gallery_images: [{ id: file.id }],
-    metadata: { siteId: site.id, leadId: site.business_id },
-    visibility: "visible",
-  });
-  const saved = await insert("products", {
-    site_id: site.id,
-    whop_product_id: product.id,
-    amount,
-  });
-  const plan = await whop(`plan-${site.id}`).variants.create({
-    account_id: env("WHOP_ACCOUNT_ID"),
-    product_id: product.id,
-    plan_type: "one_time",
-    initial_price: amount,
-    currency: "usd",
-    stock: 1,
-    unlimited_stock: false,
-    visibility: "visible",
-    release_method: "buy_now",
-    metadata: { siteId: site.id, leadId: site.business_id },
-  });
-  await client.products.publish({ id: product.id });
+  if (!plan) {
+    const planRequest = {
+      account_id: env("WHOP_ACCOUNT_ID"),
+      product_id: product.id,
+      plan_type: "one_time",
+      initial_price: amount,
+      currency: "usd",
+      stock: 1,
+      unlimited_stock: false,
+      visibility: "visible",
+      release_method: "buy_now",
+      metadata: { siteId: site.id, leadId: site.business_id },
+    };
+    plan = await client.variants.create(planRequest, {
+      idempotencyKey: requestKey("plan", site.id, planRequest),
+    });
+  }
   const account = await client.accounts.retrieve({
     id: env("WHOP_ACCOUNT_ID"),
   });
@@ -98,7 +138,7 @@ export async function listProduct(
 }
 export function productPageUrl(accountRoute: string, productRoute: string) {
   if (
-    !/^[a-z0-9-]+$/i.test(accountRoute) ||
+    !/^[a-z0-9_-]+$/i.test(accountRoute) ||
     !/^[a-z0-9-]+$/i.test(productRoute)
   )
     throw new Error("Invalid Whop storefront route");
@@ -119,11 +159,20 @@ export async function verifyProduct(
   const browser = await chromium.launch();
   try {
     const page = await browser.newPage({ locale: "en-US" });
+    // Whop keeps live connections open, so the page never reaches network idle.
     const response = await page.goto(url, {
-      waitUntil: "networkidle",
+      waitUntil: "load",
       timeout: 45000,
     });
     if (!response?.ok()) throw new Error("Whop product page is unavailable");
+    await page
+      .getByText(name, { exact: false })
+      .first()
+      .waitFor({ timeout: 20000 })
+      .catch(() => {});
+    await page
+      .waitForLoadState("networkidle", { timeout: 5000 })
+      .catch(() => {});
     const text = await page.locator("body").innerText();
     if (!text.includes(name) || !hasPrice(text, price))
       throw new Error("Whop page does not show the correct name and price");

@@ -25,7 +25,7 @@ export function deploymentReadme(name: string, pkg: Record<string, any>) {
   const deployment = pkg.dependencies?.["@tanstack/react-start"]
     ? "This is a TanStack Start application with a server build. Keep the configured Vite/Nitro deployment target and deploy the server output together with its public assets; uploading only a static dist folder is insufficient. See https://nitro.build/deploy for the configured target's deployment instructions. Run npm run preview when the project provides that script to test the production build locally."
     : "Deploy the generated dist directory to a static host. Run npm run preview if available to inspect the production build first.";
-  return `# ${name} website\n\nUnofficial concept, not affiliated with this business.\n\nRequires Node.js 22+. Run npm install, npm run dev for local preview, and npm run build for production. The source was built in an isolated Node 22 container without application secrets.\n\n${deployment}\n\nNo hosting service, domain transfer or account handoff is included. Verify business information and image licenses before publishing. Retain noindex and the unofficial notice until the business accepts the concept.\n`;
+  return `# ${name} website\n\nUnofficial concept, not affiliated with this business.\n\nRequires Node.js 22+. Run npm install, npm run dev for local preview, and npm run build for production. The source was built from its original lockfile in an isolated linux/amd64 Node 22 container without application secrets.\n\n${deployment}\n\nNo hosting service, domain transfer or account handoff is included. Verify business information and image licenses before publishing. Retain noindex and the unofficial notice until the business accepts the concept.\n`;
 }
 const sourcePageSchema = z.object({
   ref: z.string(),
@@ -147,6 +147,8 @@ export async function exportSite(
       [
         "run",
         "--rm",
+        // Lovable lockfiles pin linux-x64 native bindings; match that platform on ARM hosts.
+        "--platform=linux/amd64",
         "--memory=1g",
         "--cpus=2",
         "--cap-drop=ALL",
