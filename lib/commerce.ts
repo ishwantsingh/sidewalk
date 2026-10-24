@@ -1,16 +1,9 @@
-import { WhopClient } from "@whop/sdk";
+import { whop } from "./whop";
 import { chromium } from "playwright";
 import { env } from "./config";
 import { slug } from "./domain";
 import { request } from "./http";
 import { insert, update } from "./db";
-export function whop(key?: string) {
-  return new WhopClient({
-    token: env("WHOP_API_KEY"),
-    apiVersionDate: "2026-10-15-1",
-    ...(key ? { idempotencyKey: key } : {}),
-  });
-}
 export async function listProduct(
   site: {
     id: string;

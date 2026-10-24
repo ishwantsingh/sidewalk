@@ -1,10 +1,10 @@
 # Netlify web app + Mac worker
 
-Netlify hosts the Next.js dashboard, API, Whop webhook, salesperson pages and buyer download redirects. The Mac runs **one** persistent worker with Docker and Playwright Chromium. Both connect to the existing Supabase project. The worker polls Supabase directly; no tunnel, port forwarding or local web server is needed.
+Netlify hosts the Next.js dashboard, API, Whop webhook, salesperson pages and buyer download redirects. The Mac runs **one** persistent worker with Docker and Playwright Chromium. Both connect to the existing Supabase project. The worker polls Supabase directly; no tunnel, port forwarding or local web server is needed. The production origin is `https://sidewalkai.netlify.app`.
 
 ## 1. Create the Netlify project
 
-1. Import `ishwantsingh/sidewalk` from GitHub into a **Free** Netlify project. Select `netlify-integration` as the production branch for this deployment (change it when this work is merged).
+1. Import `ishwantsingh/sidewalk` from GitHub into a **Free** Netlify project. Select `main` as the production branch.
 2. Keep the repository root as the base directory. The committed `netlify.toml` selects Node 22, runs `npm run check` and publishes `.next`. Netlify automatically applies its Next.js adapter, including API functions. Do not choose static export, add an SPA redirect, or run the worker as a build command.
 3. Choose the final site name and copy its stable `https://YOUR_SITE.netlify.app` origin. An initial deploy can show the dashboard before integrations are configured.
 4. For this hackathon, disable automatic Deploy Previews and branch deploys in Netlify's continuous deployment settings. Use the stable production URL for webhooks, sales and downloads; preview origins do not match `APP_URL` and must not share live workflows.
@@ -81,5 +81,9 @@ Pipeline runs are not Netlify deployments. Local Docker/browser/build work and p
 At the time of setup, new Free accounts have 300 credits/month: production deploys cost 15 credits, web requests 2 per 10,000, bandwidth 20 per GB and functions 10 per GB-hour. Those share one allowance; reaching the free limit pauses hosting. Five or six small runs should fit the hosting allowance, but actual polling, response sizes, visitors and redeploys determine usage. Check Netlify's usage dashboard after the first run. External provider charges/credits and Supabase storage limits remain separate.
 
 `npm run check` and the browser suite verify the local app. Only a successful Netlify deployment verifies the adapter/function bundle. A real signed Whop payment and subsequent worker delivery verify checkout fulfillment; the read-only smoke check does not substitute for them.
+
+## API startup failures
+
+If the dashboard loads but every API route returns an empty HTTP 500, inspect Netlify's **Functions → Next.js Server Handler** logs. A missing `playwright-core/browsers.json` indicates worker browser code entered the serverless dependency graph. Shared payment access lives in `lib/whop.ts`; keep `lib/commerce.ts` (browser storefront verification) in the worker. The API runtime regression test rejects imports of Playwright/Lighthouse. Do not install browsers on Netlify to fix this boundary.
 
 References: [Netlify Next.js adapter](https://docs.netlify.com/build/frameworks/framework-setup-guides/nextjs/overview/), [runtime environment variables](https://docs.netlify.com/build/functions/environment-variables/), [current pricing](https://www.netlify.com/pricing/).

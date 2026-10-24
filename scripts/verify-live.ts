@@ -2,7 +2,8 @@ import nextEnv from "@next/env";
 import { createHash } from "node:crypto";
 import { db, rows } from "../lib/db";
 import { env } from "../lib/config";
-import { verifyProduct, whop } from "../lib/commerce";
+import { verifyProduct } from "../lib/commerce";
+import { whop } from "../lib/whop";
 nextEnv.loadEnvConfig(process.cwd());
 const [businesses, audits, sites, products, emails, sales, orders] =
   await Promise.all(

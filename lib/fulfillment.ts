@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db, one, update, event } from "./db";
 import { env } from "./config";
 import { sendMail } from "./mail";
-import { whop } from "./commerce";
+import { whop } from "./whop";
 export const hashToken = (token: string) =>
   createHash("sha256").update(token).digest("hex");
 export async function acceptPayment(eventId: string, paymentId: string) {

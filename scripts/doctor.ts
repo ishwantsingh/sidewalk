@@ -9,7 +9,7 @@ import { Terac } from "../lib/terac";
 import { salesOpportunity } from "../lib/sales";
 import { teracArguments } from "../lib/terac";
 import { Lovable } from "../lib/lovable";
-import { whop } from "../lib/commerce";
+import { whop } from "../lib/whop";
 import OpenAI from "openai";
 import { safeError } from "../lib/preflight";
 import { request, json } from "../lib/http";
