@@ -1,0 +1,55 @@
+import { expect, it } from "vitest";
+import { toolArguments } from "../lib/lovable";
+it("uses the MCP server advertised parameter names without an LLM", () => {
+  expect(
+    toolArguments(
+      {
+        name: "read_file",
+        inputSchema: {
+          type: "object",
+          properties: {
+            projectId: { type: "string" },
+            file_path: { type: "string" },
+            ref: { type: "string" },
+          },
+          required: ["projectId", "file_path"],
+        },
+      },
+      { project_id: "project-1", path: "src/App.tsx", ref: "HEAD" },
+    ),
+  ).toEqual({ projectId: "project-1", file_path: "src/App.tsx", ref: "HEAD" });
+});
+it("fails closed if the integration requires an unknown field", () => {
+  expect(() =>
+    toolArguments(
+      {
+        name: "read_file",
+        inputSchema: {
+          type: "object",
+          properties: { newField: { type: "string" } },
+          required: ["newField"],
+        },
+      },
+      { project_id: "project-1" },
+    ),
+  ).toThrow("unsupported argument");
+});
+
+it("preserves a raw JSON source file as source text", async () => {
+  const { Lovable } = await import("../lib/lovable");
+  const { vi } = await import("vitest");
+  const lovable = new Lovable();
+  lovable.tools = [
+    {
+      name: "read_file",
+      inputSchema: { type: "object", properties: { path: { type: "string" } } },
+    },
+  ];
+  const source = '{"name":"site","scripts":{"build":"vite build"}}';
+  vi.spyOn(lovable.client, "callTool").mockResolvedValue({
+    content: [{ type: "text", text: source }],
+  });
+  expect(await lovable.call("read_file", { path: "package.json" })).toEqual({
+    content: source,
+  });
+});

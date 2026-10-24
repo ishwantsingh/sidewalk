@@ -1,0 +1,61 @@
+{
+  "name": "sidewalk",
+  "version": "1.0.0",
+  "description": "Autonomous local website agency: discover, build, sell on Whop, deliver source ZIPs",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "worker": "tsx worker/index.ts",
+    "lovable:auth": "tsx scripts/lovable-auth.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm test && npm run build",
+    "doctor": "tsx scripts/doctor.ts",
+    "verify:live": "tsx scripts/verify-live.ts",
+    "format": "prettier --write app lib worker scripts tests README.md package.json tsconfig.json",
+    "format:check": "prettier --check app lib worker scripts tests README.md package.json tsconfig.json",
+    "test:browser": "tsx scripts/browser-test.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "@next/env": "^16.4.3",
+    "@supabase/supabase-js": "^2.118.0",
+    "@whop/sdk": "^2.6.0",
+    "archiver": "^7.0.1",
+    "chrome-launcher": "^1.2.2",
+    "ipaddr.js": "^2.5.0",
+    "lighthouse": "^13.5.0",
+    "next": "^16.4.3",
+    "openai": "^7.43.0",
+    "playwright": "^1.64.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "standardwebhooks": "^1.1.1",
+    "undici": "^8.12.3",
+    "zod": "^4.6.7",
+    "tsx": "^4.23.15"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.11",
+    "@types/archiver": "^6.0.4",
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "node": "^22.23.4",
+    "prettier": "^3.9.10",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.5"
+  },
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "optionalDependencies": {
+    "@rolldown/binding-darwin-arm64": "^1.2.15"
+  }
+}
