@@ -13,6 +13,8 @@ const f = vi.hoisted(() => ({
   call: vi.fn(),
   waitForBuild: vi.fn(),
   research: vi.fn(),
+  discover: vi.fn(),
+  collectBusinessContent: vi.fn(),
 }));
 vi.mock("../lib/db", () => ({
   insert: f.insert,
@@ -29,17 +31,15 @@ vi.mock("../lib/db", () => ({
   }),
 }));
 vi.mock("../lib/research", () => ({
-  discover: async () => [
-    {
-      id: "place-test",
-      displayName: { text: "Test Venue" },
-      formattedAddress: "Test address",
-    },
-  ],
+  discover: f.discover,
   research: f.research,
 }));
 vi.mock("../lib/publication", () => ({
   waitForPublication: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("../lib/business-content", () => ({
+  collectBusinessContent: f.collectBusinessContent,
+  businessContentCost: () => 0.55,
 }));
 vi.mock("../lib/audit", () => ({ inspect: f.inspect }));
 vi.mock("../lib/export", () => ({ exportSite: f.exportSite }));
@@ -61,7 +61,6 @@ const params: RunInput = {
   radiusMeters: 1300,
   types: ["cafe"],
   maxBusinesses: 1,
-  siteScoreThreshold: 45,
   maxSitesToBuild: 1,
   maxRealEmails: 1,
   maxSalesTasks: 1,
@@ -78,14 +77,27 @@ beforeEach(() => {
     COST_LOVABLE_BUILD_USD: "3",
     COST_LOVABLE_REPAIR_USD: "1",
     SALE_PRICE_USD: "199",
-    PAYMENT_FEE_PERCENT: "3",
-    PAYMENT_FEE_FIXED_USD: ".3",
     SENDER_NAME: "Test sender",
     TERAC_MAX_TASK_COST_USD: "20",
   }))
     vi.stubEnv(key, value);
   f.reserve.mockResolvedValue({ data: true, error: null });
+  f.collectBusinessContent.mockResolvedValue({
+    collectedAt: "2026-10-24T12:00:00Z",
+    testimonials: [],
+    photos: [],
+    menuImages: [],
+    visualDirection: "Warm and inviting",
+    issues: [],
+  });
   f.rows.mockResolvedValue([]);
+  f.discover.mockResolvedValue([
+    {
+      id: "place-test",
+      displayName: { text: "Test Venue" },
+      formattedAddress: "Test address",
+    },
+  ]);
   f.insert.mockImplementation(async (table, values) => ({
     ...values,
     id: `${table}-test`,
@@ -157,6 +169,64 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllEnvs());
 describe("orchestrator safety gates with isolated provider adapters", () => {
+  it("collects and persists sourced content before creating the Lovable project", async () => {
+    const content = {
+      collectedAt: "2026-10-24T12:00:00Z",
+      testimonials: [
+        {
+          quote: "Lovely coffee",
+          author: "Sam",
+          rating: 5,
+          source: "https://maps.google.com/review/1",
+          authorUri: null,
+          publishedAt: null,
+        },
+      ],
+      photos: [],
+      menuImages: [],
+      visualDirection: "Warm timber",
+      issues: [],
+    };
+    f.collectBusinessContent.mockResolvedValue(content);
+    await runPipeline({ id: "run-test", params });
+    expect(f.collectBusinessContent).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "Test Venue" }),
+      "place-test",
+    );
+    const saved = f.update.mock.calls.find(
+      ([table, , values]) => table === "businesses" && values.brief?.content,
+    );
+    expect(saved?.[2].brief.content).toEqual(content);
+    const creation = f.call.mock.calls.find(
+      ([name]) => name === "create_project",
+    )!;
+    expect(creation[1].initial_message).toContain("Lovely coffee");
+    expect(creation[1].initial_message).not.toContain("noindex");
+    expect(creation[1].initial_message).not.toContain(
+      "Unofficial concept, not affiliated with this business",
+    );
+    expect(
+      f.update.mock.invocationCallOrder[f.update.mock.calls.indexOf(saved!)],
+    ).toBeLessThan(f.call.mock.invocationCallOrder[0]);
+    expect(
+      f.reserve.mock.calls.some(
+        ([, args]) => args.p_action === "BUSINESS_CONTENT",
+      ),
+    ).toBe(true);
+  });
+  it("does not pay for a Lovable build when content inspection fails", async () => {
+    f.collectBusinessContent.mockRejectedValue(
+      new Error("Photo inspection failed"),
+    );
+    await runPipeline({ id: "run-test", params });
+    expect(f.call).not.toHaveBeenCalled();
+    expect(
+      f.reserve.mock.calls.some(
+        ([, args]) => args.p_action === "LOVABLE_BUILD",
+      ),
+    ).toBe(false);
+    expect(f.exportSite).not.toHaveBeenCalled();
+  });
   it("persists the project before waiting and never audits or sells a paused build", async () => {
     f.waitForBuild.mockImplementation(async () => {
       expect(f.insert).toHaveBeenCalledWith(
@@ -454,7 +524,7 @@ describe("explicit business selection", () => {
       if (table === "businesses") return [business];
       if (table === "audits") return [audit];
       if (table === "opportunities")
-        return [{ expected_contribution: 8, priority: 40, quoted_price: 199 }];
+        return [{ priority: 40, quoted_price: 199 }];
       return [];
     });
     return { business, audit };
@@ -539,7 +609,7 @@ describe("existing generated-site recovery", () => {
           },
         ];
       if (table === "opportunities")
-        return [{ expected_contribution: 8, priority: 40, quoted_price: 199 }];
+        return [{ priority: 40, quoted_price: 199 }];
       if (table === "sites")
         return [
           { id: "site-existing", lovable_project_id: "project-existing" },
@@ -619,8 +689,7 @@ it("reuses QA only for the unchanged recorded source revision and rechecks publi
           defects: ["overflow", "metadata"],
         },
       ];
-    if (table === "opportunities")
-      return [{ expected_contribution: 8, priority: 40, quoted_price: 199 }];
+    if (table === "opportunities") return [{ priority: 40, quoted_price: 199 }];
     if (table === "sites")
       return [
         {
@@ -679,7 +748,7 @@ describe("recovery after a rejected Whop listing", () => {
           },
         ];
       if (table === "opportunities")
-        return [{ expected_contribution: 8, priority: 40, quoted_price: 199 }];
+        return [{ priority: 40, quoted_price: 199 }];
       if (table === "sites")
         return [
           {
@@ -739,5 +808,129 @@ describe("recovery after a rejected Whop listing", () => {
     ]);
     await expect(resume()).rejects.toThrow("Refusing recovery");
     expect(f.listProduct).not.toHaveBeenCalled();
+  });
+});
+
+describe("simple hackathon selection", () => {
+  it("builds with two medium-confidence identity facts and a $45 sales allowance", async () => {
+    vi.stubEnv("TERAC_MAX_TASK_COST_USD", "45");
+    const brief = await f.research();
+    brief.facts = brief.facts
+      .slice(0, 2)
+      .map((fact: any) => ({ ...fact, confidence: "medium" }));
+    f.research.mockResolvedValue(brief);
+    await runPipeline({
+      id: "run-test",
+      params: { ...params, maxEstimatedRunCostUsd: 75 },
+    });
+    expect(f.listProduct).toHaveBeenCalledOnce();
+    expect(f.reserve).toHaveBeenCalledWith(
+      "reserve_cost",
+      expect.objectContaining({ p_action: "TERAC_SALES_BUDGET", p_cost: 45 }),
+    );
+    const opportunity = f.insert.mock.calls.find(
+      ([table]) => table === "opportunities",
+    )?.[1];
+    expect(opportunity).not.toHaveProperty("purchase_probability");
+    expect(opportunity).not.toHaveProperty("expected_contribution");
+  });
+  it.each(["contactSource", "phoneSource"])(
+    "rejects a sole contact without %s",
+    async (field) => {
+      const brief = await f.research();
+      if (field === "contactSource") brief.contactPhone = null;
+      else brief.contactEmail = null;
+      brief[field] = null;
+      f.research.mockResolvedValue(brief);
+      await runPipeline({ id: "run-test", params });
+      expect(f.call).not.toHaveBeenCalled();
+    },
+  );
+  it("selects no-website businesses ahead of weak sites regardless of discovery order", async () => {
+    const brief = await f.research();
+    f.discover.mockResolvedValue([
+      {
+        id: "weak",
+        displayName: { text: "Weak" },
+        formattedAddress: "Address",
+      },
+      {
+        id: "absent",
+        displayName: { text: "Absent" },
+        formattedAddress: "Address",
+      },
+    ]);
+    f.research
+      .mockResolvedValueOnce({
+        ...brief,
+        name: "Weak",
+        officialWebsite: "https://weak.example",
+        websiteAbsent: false,
+      })
+      .mockResolvedValueOnce({
+        ...brief,
+        name: "Absent",
+        contactEmail: null,
+        contactSource: null,
+      });
+    f.inspect.mockResolvedValueOnce({
+      score: 60,
+      defects: ["Missing contact link"],
+    });
+    await runPipeline({
+      id: "run-test",
+      params: { ...params, maxBusinesses: 2 },
+    });
+    expect(f.collectBusinessContent).toHaveBeenCalledOnce();
+    expect(f.collectBusinessContent).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "Absent" }),
+      "absent",
+    );
+  });
+  it("automatically builds a weak site with just one defect", async () => {
+    f.research.mockResolvedValue({
+      ...(await f.research()),
+      officialWebsite: "https://weak.example",
+      websiteAbsent: false,
+    });
+    f.inspect.mockResolvedValueOnce({
+      score: 85,
+      defects: ["Mobile overflow"],
+    });
+    await runPipeline({ id: "run-test", params });
+    expect(f.listProduct).toHaveBeenCalledOnce();
+  });
+  it("reconsiders a previously rejected unbuilt lead without duplicating its records", async () => {
+    f.rows.mockImplementation(async (table, field) => {
+      if (table === "businesses" && field === "place_id")
+        return [{ id: "old-business", run_id: "old-run" }];
+      if (table === "audits") return [{ id: "old-audit" }];
+      if (table === "opportunities") return [{ id: "old-opportunity" }];
+      return [];
+    });
+    await runPipeline({ id: "run-test", params });
+    expect(
+      f.insert.mock.calls.some(([table]) =>
+        ["businesses", "audits", "opportunities"].includes(table),
+      ),
+    ).toBe(false);
+    expect(f.update).toHaveBeenCalledWith(
+      "businesses",
+      "old-business",
+      expect.objectContaining({ run_id: "run-test" }),
+    );
+    expect(f.listProduct).toHaveBeenCalledOnce();
+  });
+  it("never automatically reconsiders a prior billable build attempt", async () => {
+    f.rows.mockImplementation(async (table) =>
+      table === "businesses"
+        ? [{ id: "old-business" }]
+        : table === "events"
+          ? [{ action: "LOVABLE_BUILD" }]
+          : [],
+    );
+    await runPipeline({ id: "run-test", params });
+    expect(f.research).not.toHaveBeenCalled();
+    expect(f.call).not.toHaveBeenCalled();
   });
 });

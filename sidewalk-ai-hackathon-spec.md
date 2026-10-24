@@ -13,7 +13,7 @@ The app must perform this exact, real sequence:
 ```mermaid
 flowchart TD
   A["Find local businesses"] --> B["Find or audit current websites"]
-  B --> C["Rank opportunity and economics"]
+  B --> C["Rank by website need and contact availability"]
   C --> D["Research + build with Lovable"]
   D --> E["QA + publish preview + export ZIP"]
   E --> F["Create individual Whop product"]
@@ -61,38 +61,33 @@ flowchart TD
 
 ### Website classification
 
-| Classification | Logic | Action |
-|---|---|---|
-| `NO_WEBSITE` | No legitimate official site after Places + Exa cross-check | High-priority candidate |
-| `POOR_WEBSITE` | Site exists, score `< 45/100`, with at least two specific defects | High-priority candidate |
-| `GOOD_WEBSITE` | Site score `>= 45/100` | List, but do not generate |
-| `NEEDS_REVIEW` | Site/source inaccessible, ambiguous or insufficient evidence | List, but do not generate |
+| Classification | Logic                                                         | Action                    |
+| -------------- | ------------------------------------------------------------- | ------------------------- |
+| `NO_WEBSITE`   | No legitimate official site after Places + Exa cross-check    | High-priority candidate   |
+| `POOR_WEBSITE` | Site exists, score `< 75/100` or at least one measured defect | High-priority candidate   |
+| `GOOD_WEBSITE` | Site score `>= 75/100` with no measured defects               | List, but do not generate |
+| `NEEDS_REVIEW` | Site/source inaccessible, ambiguous or insufficient evidence  | List, but do not generate |
 
 ### Explainable score (0–100, higher = better)
 
-| Criterion | Weight | Measurement |
-|---|---:|---|
-| Mobile responsiveness | 25 | Playwright mobile viewport, overflow/layout checks |
-| Navigation / menu / contact | 25 | Presence and usability of key business information |
-| Functional links and availability | 20 | HTTP checks, HTTPS, broken links |
-| Performance | 15 | Lighthouse/mobile measurements |
-| Design quality | 10 | LLM rubric grounded in an actual screenshot |
-| Basic SEO | 5 | Title, description, headings |
+| Criterion                         | Weight | Measurement                                        |
+| --------------------------------- | -----: | -------------------------------------------------- |
+| Mobile responsiveness             |     25 | Playwright mobile viewport, overflow/layout checks |
+| Navigation / menu / contact       |     25 | Presence and usability of key business information |
+| Functional links and availability |     20 | HTTP checks, HTTPS, broken links                   |
+| Performance                       |     15 | Lighthouse/mobile measurements                     |
+| Design quality                    |     10 | LLM rubric grounded in an actual screenshot        |
+| Basic SEO                         |      5 | Title, description, headings                       |
 
 For `NO_WEBSITE`, display **N/A** for the website score, not an invented `0/100` measurement. It still gets maximum website-opportunity priority.
 
-### Business economics / lead priority
+### Price, costs and lead priority
 
-Show four values for every candidate:
+Display the quoted sale price and estimated research, build and sales costs. Reserve estimated provider spending against the run cap. Costs are informational and never exclude a lead based on speculative conversion or profit.
 
-- **Website opportunity:** `100 - websiteScore` for audited sites; `100` for confirmed no-site businesses.
-- **Quoted sale price:** Simple configurable pricing, e.g. `$199` base, optionally `$299` for more complex menus. Prices are hypotheses, not market-validated facts.
-- **Estimated production cost:** Exa + Places + model + Lovable costs attributable to that lead. Record real costs when available; clearly label any estimate.
-- **Expected contribution:** `estimatedPurchaseProbability × (price - paymentFee) - expectedBuildCost - researchCost - salesAllowance`.
+Prioritize businesses with no website and a sourced email or phone, then businesses with weak websites and a sourced email or phone. Lower website scores and contact coverage break ties within a tier. A clear identity and sourced location are sufficient; facts may come from matching business pages, social profiles or reputable local listings. Do not require three facts or a high-confidence-only address. Exclude chains and ambiguous identities.
 
-Purchase probability is an **explicit heuristic** (e.g. based on website gap, contact availability and content completeness), not a predictive model trained on customer outcomes. Never claim precision that does not exist.
-
-**Lead priority** favors a severe website gap, enough public information to build accurately, a sourced public business email or phone, and a good estimated return after cost. Generate only the top `2–3` leads per run. Businesses without either sourced contact channel are excluded from the sales cycle. Email-only businesses remain eligible for sales email; phone-only businesses remain eligible for a call.
+Default to the single best lead per run, a $75 run cap and $45 per Terac assignment. Email-only and phone-only businesses remain eligible. Reconsider unbuilt leads on later runs, but never replay prior billable build attempts automatically.
 
 ## 4. Website research and build
 
@@ -115,9 +110,9 @@ For each selected business:
 2. Supplies a compact, tailored brief: brand feel, layout, mobile behavior, menu/sections, verified business facts, real navigation links, no secrets/backend.
 3. Lovable generates a polished responsive site. We deliberately constrain it to a **self-contained front-end React/Vite-style codebase** so a code ZIP is a genuine usable deliverable.
 4. Agent obtains preview and deploys with `deploy_project` when the site passes checks.
-5. Site includes an obvious **“Unofficial concept, not affiliated with this business”** notice and `noindex` directive until accepted by the owner.
+5. Site uses sourced Google reviews with exact quotes and reviewer names, real business photos and readable menu images where available. Style matches the business atmosphere; navigation stays within the generated website, with no links to the existing official website.
 
-**Required pages/sections:** Hero, offerings/menu when available, about if factual, location/hours/contact, order/reservation outbound link where verified, responsive footer. Real assets/links only.
+**Required pages/sections:** Hero, offerings/menu when available, about if factual, location/hours/contact, in-page menu/contact actions and sourced Maps directions, responsive footer. Real assets/links only.
 
 ### QA gate
 
@@ -125,7 +120,7 @@ For each selected business:
 - Mobile screenshot (375–390 px) has no major horizontal overflow or clipped CTA.
 - Main menu/contact/navigation links work.
 - Business name and information match the approved brief.
-- Unofficial disclaimer and `noindex` appear.
+- Sourced testimonials, real business photos and a photo-derived digital menu appear when available; existing official-website links are absent.
 - At most two Lovable correction attempts. If still broken, mark `BUILD_FAILED` and **do not create a Whop product or recruit a salesperson**.
 
 ## 5. Real ZIP export — the actual item being sold
@@ -151,15 +146,15 @@ The agent creates an individual **Whop product** only after the website preview 
 
 Example:
 
-| Field | Example |
-|---|---|
-| Product title | `Website for Maple Street Cafe` |
-| Description | `Responsive website source files for Maple Street Cafe, with menu and contact sections.` |
-| Product media | Actual screenshot of newly generated site |
-| Price | `$199`, one time |
-| Listing | Visible on our Whop storefront, with a unique product route |
-| Checkout | Whop-native checkout for that product's one-time plan |
-| Inventory | One unit per business-specific website where supported |
+| Field         | Example                                                                                  |
+| ------------- | ---------------------------------------------------------------------------------------- |
+| Product title | `Website for Maple Street Cafe`                                                          |
+| Description   | `Responsive website source files for Maple Street Cafe, with menu and contact sections.` |
+| Product media | Actual screenshot of newly generated site                                                |
+| Price         | `$199`, one time                                                                         |
+| Listing       | Visible on our Whop storefront, with a unique product route                              |
+| Checkout      | Whop-native checkout for that product's one-time plan                                    |
+| Inventory     | One unit per business-specific website where supported                                   |
 
 **Required API actions:**
 
@@ -210,19 +205,19 @@ No manual download handoff. No fake payments. A team-controlled genuine low-valu
 
 ## 9. App architecture — minimal, deployable
 
-| Component | Choice | Responsibility |
-|---|---|---|
-| Dashboard/API | Next.js + TypeScript | Run setup, pipeline UI, lead/site/product status, webhook route |
-| Workflow worker | One persistent Node/TypeScript worker | Sequential external calls, Lovable MCP session, retries |
-| Database | Postgres (Supabase) | Leads, scores, runs, sites, products, sales tasks, orders |
-| Private ZIP storage | Supabase Storage private bucket | Store and sign download URLs |
-| Prospecting | Google Places API | Nearby business discovery |
-| Research | Exa | Official website/menu/contact discovery |
-| Audit | Playwright + Lighthouse | Website testing/screenshots |
-| Site builder | Lovable MCP | Create, modify, deploy and inspect code |
-| Commerce | Whop API + webhook | Product pages, one-time price, payment confirmation |
-| Sales | Terac MCP | Recruit a salesperson, hand off the offer, collect and approve a call report |
-| Email | Resend or equivalent | Sales offer emails and paid-delivery emails |
+| Component           | Choice                                | Responsibility                                                               |
+| ------------------- | ------------------------------------- | ---------------------------------------------------------------------------- |
+| Dashboard/API       | Next.js + TypeScript                  | Run setup, pipeline UI, lead/site/product status, webhook route              |
+| Workflow worker     | One persistent Node/TypeScript worker | Sequential external calls, Lovable MCP session, retries                      |
+| Database            | Postgres (Supabase)                   | Leads, scores, runs, sites, products, sales tasks, orders                    |
+| Private ZIP storage | Supabase Storage private bucket       | Store and sign download URLs                                                 |
+| Prospecting         | Google Places API                     | Nearby business discovery                                                    |
+| Research            | Exa                                   | Official website/menu/contact discovery                                      |
+| Audit               | Playwright + Lighthouse               | Website testing/screenshots                                                  |
+| Site builder        | Lovable MCP                           | Create, modify, deploy and inspect code                                      |
+| Commerce            | Whop API + webhook                    | Product pages, one-time price, payment confirmation                          |
+| Sales               | Terac MCP                             | Recruit a salesperson, hand off the offer, collect and approve a call report |
+| Email               | Resend or equivalent                  | Sales offer emails and paid-delivery emails                                  |
 
 Use a **single orchestrator** plus typed steps; do not build a complicated multi-agent society. The LLM decides which leads are attractive, prepares content, and directs Lovable. Ordinary code handles scoring arithmetic, source checks, cost limits, product creation, sales recruitment, payment verification, and file delivery.
 
@@ -245,19 +240,19 @@ Any failure → FAILED(stage, reason) without pretending later steps succeeded.
 
 ### Only the necessary database tables
 
-| Table | Important fields |
-|---|---|
-| `runs` | `id`, geographic input, lead/build/sales-task limits, spend cap, status |
-| `businesses` | `id`, permitted place identifier, display identity, source URLs, website URL, phone/email and provenance, state |
-| `audits` | `business_id`, score, measurements, screenshot URL, explanation, classification |
-| `opportunities` | `business_id`, quoted price, estimated build cost, heuristic conversion probability, priority |
-| `sites` | `business_id`, Lovable project ID, preview URL, ZIP private path/checksum, QA status |
-| `products` | `site_id`, Whop product ID, plan ID, storefront URL, purchase URL, amount |
-| `emails` | Business ID, recipient, exact subject/body, send status, provider acknowledgement, opt-out |
-| `sales_tasks` | Business/run IDs, brief, Terac opportunity ID, status, reserved/quoted costs, call report, errors |
-| `sales_suppressions` | Normalized do-not-call phone number |
-| `orders` | Whop payment/event ID, product ID, buyer contact, amount, paid timestamp, ZIP delivery state |
-| `events` | Run ID, business ID, timestamp, action, outcome, cost/estimate, reason |
+| Table                | Important fields                                                                                                |
+| -------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `runs`               | `id`, geographic input, lead/build/sales-task limits, spend cap, status                                         |
+| `businesses`         | `id`, permitted place identifier, display identity, source URLs, website URL, phone/email and provenance, state |
+| `audits`             | `business_id`, score, measurements, screenshot URL, explanation, classification                                 |
+| `opportunities`      | `business_id`, quoted price, estimated build cost, estimated sales cost, website/contact priority               |
+| `sites`              | `business_id`, Lovable project ID, preview URL, ZIP private path/checksum, QA status                            |
+| `products`           | `site_id`, Whop product ID, plan ID, storefront URL, purchase URL, amount                                       |
+| `emails`             | Business ID, recipient, exact subject/body, send status, provider acknowledgement, opt-out                      |
+| `sales_tasks`        | Business/run IDs, brief, Terac opportunity ID, status, reserved/quoted costs, call report, errors               |
+| `sales_suppressions` | Normalized do-not-call phone number                                                                             |
+| `orders`             | Whop payment/event ID, product ID, buyer contact, amount, paid timestamp, ZIP delivery state                    |
+| `events`             | Run ID, business ID, timestamp, action, outcome, cost/estimate, reason                                          |
 
 Do not overbuild a general CRM or customer management system.
 
@@ -266,7 +261,7 @@ Do not overbuild a general CRM or customer management system.
 ```text
 POST /api/runs                  Start an autonomous run
 GET  /api/runs/:id             Run status + actual event timeline
-GET  /api/businesses           Lead list, scores, economics, pipeline state
+GET  /api/businesses           Lead list, scores, cost estimates, pipeline state
 GET  /api/businesses/:id       Audit + before/after + site + Whop URLs
 POST /api/webhooks/whop        Verified payment webhook, triggers delivery
 GET  /api/download/:token      Signed buyer-authorized ZIP download
@@ -297,7 +292,6 @@ Suggested initial parameters:
   "radiusMeters": 1300,
   "types": ["cafe", "restaurant", "bakery"],
   "maxBusinesses": 30,
-  "siteScoreThreshold": 45,
   "maxSitesToBuild": 3,
   "maxRealEmails": 3,
   "maxSalesTasks": 3,

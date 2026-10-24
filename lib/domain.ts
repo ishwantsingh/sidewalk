@@ -1,3 +1,5 @@
+import type { Brief } from "./research";
+
 export type Classification =
   "NO_WEBSITE" | "POOR_WEBSITE" | "GOOD_WEBSITE" | "NEEDS_REVIEW";
 export function classify(
@@ -7,51 +9,40 @@ export function classify(
 ): Classification {
   if (confirmedAbsent) return "NO_WEBSITE";
   if (score === null) return "NEEDS_REVIEW";
-  return score >= 45
-    ? "GOOD_WEBSITE"
-    : defects.length >= 2
-      ? "POOR_WEBSITE"
-      : "NEEDS_REVIEW";
+  return score < 75 || defects.length > 0 ? "POOR_WEBSITE" : "GOOD_WEBSITE";
 }
-export function economics(
-  score: number | null,
-  classification: Classification,
-  hasContact: boolean,
-  completeness: number,
-  price: number,
-  buildCost: number,
-  researchCost: number,
-  feePercent: number,
-  feeFixed: number,
-  salesCost = 0,
-) {
-  const opportunity =
-    classification === "NO_WEBSITE" ? 100 : score === null ? 0 : 100 - score;
-  const probability = Math.min(
-    0.3,
-    Math.max(
-      0,
-      0.02 +
-        (opportunity / 100) * 0.12 +
-        (hasContact ? 0.06 : 0) +
-        completeness * 0.05,
-    ),
+export function hasSourcedContact(brief: Brief) {
+  return !!(
+    (brief.contactEmail && brief.contactSource) ||
+    (brief.contactPhone && brief.phoneSource)
   );
-  const expected =
-    probability * (price - (price * feePercent) / 100 - feeFixed) -
-    buildCost -
-    researchCost -
-    salesCost;
-  return {
-    website_opportunity: opportunity,
-    quoted_price: price,
-    estimated_build_cost: buildCost,
-    research_cost: researchCost,
-    estimated_sales_cost: salesCost,
-    purchase_probability: probability,
-    expected_contribution: expected,
-    priority: hasContact ? opportunity * 0.6 + completeness * 20 + expected : 0,
-  };
+}
+export function businessLocation(brief: Brief) {
+  return brief.facts.find((fact) => /address|location/i.test(fact.label))
+    ?.value;
+}
+/** Website need determines the tier; contact coverage and lower scores break ties. */
+export function leadPriority(
+  classification: Classification,
+  score: number | null,
+  brief: Brief,
+) {
+  if (!hasSourcedContact(brief)) return 0;
+  const tier =
+    classification === "NO_WEBSITE"
+      ? 1000
+      : classification === "POOR_WEBSITE"
+        ? 500
+        : 0;
+  if (!tier) return 0;
+  const contacts =
+    Number(!!(brief.contactEmail && brief.contactSource)) +
+    Number(!!(brief.contactPhone && brief.phoneSource));
+  return (
+    tier +
+    (classification === "POOR_WEBSITE" ? 100 - (score ?? 100) : 0) +
+    contacts * 10
+  );
 }
 export function safePath(path: string) {
   if (

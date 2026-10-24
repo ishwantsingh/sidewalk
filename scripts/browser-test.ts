@@ -73,20 +73,32 @@ try {
       .getByRole("button", { name: "Start run", exact: true })
       .isDisabled()),
   );
+  assert.equal(
+    await page.locator('[name="maxSitesToBuild"]').inputValue(),
+    "1",
+  );
+  assert.equal(
+    await page.locator('[name="maxEstimatedRunCostUsd"]').inputValue(),
+    "75",
+  );
+  assert.equal(
+    await page.locator('[name="requireEmailAndPhone"]').isChecked(),
+    false,
+  );
   await page.keyboard.press("Escape");
   await page.route("**/api/runs", async (route) => {
     if (route.request().method() === "POST") {
       const body = route.request().postDataJSON();
       assert.equal(body.area, "Williamsburg, Brooklyn");
-      assert.equal(body.maxSalesTasks, body.selectedBusinessId ? 1 : 2);
-      assert.equal(body.maxRealEmails, body.selectedBusinessId ? 1 : 2);
+      assert.equal(body.maxSalesTasks, 1);
+      assert.equal(body.maxRealEmails, 1);
       if (body.selectedBusinessId) {
         assert.equal(body.selectedBusinessId, "live-business");
         assert.equal(body.maxSitesToBuild, 1);
         assert.equal(body.maxBusinesses, 1);
         assert.deepEqual(body.types, ["cafe"]);
       }
-      assert.equal(body.requireEmailAndPhone, true);
+      assert.equal(body.requireEmailAndPhone, !body.selectedBusinessId);
       await route.fulfill({
         status: 201,
         json: { id: "live-run", params: body },

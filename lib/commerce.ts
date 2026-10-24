@@ -5,6 +5,38 @@ import { slug } from "./domain";
 import { request } from "./http";
 import { insert, rows, update } from "./db";
 import { createHash } from "node:crypto";
+import type { Brief } from "./research";
+
+export function productDescription(
+  name: string,
+  preview: string,
+  amount: number,
+  brief?: Brief,
+) {
+  const location = brief?.facts.find((fact) =>
+    /address|location/i.test(fact.label),
+  )?.value;
+  const context = [
+    name.slice(0, 100),
+    brief?.category?.slice(0, 60),
+    location?.slice(0, 140),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const details = [
+    `LIVE PREVIEW: ${preview}`,
+    `PRICE: $${amount.toFixed(2)} USD, one-time purchase. One source-code package available; no subscription.`,
+    "WHAT YOU GET: The React website shown in the preview, editable source files in a ZIP, dependency lockfile, and a README with local preview, build and deployment instructions. The gallery shows the actual generated website.",
+    "DELIVERY: After confirmed payment, a secure download link is emailed to the email address used at checkout. The link is valid for 7 days. Save the ZIP after downloading.",
+    "SETUP: Node.js 22+ is required to build locally. You or your developer can edit the source, run npm install and npm run build, and deploy the built files to a static host.",
+    "SCOPE: Source code only. Hosting, domain registration, ongoing maintenance, custom revisions, backend services, booking and payment integrations are not included. Remote business photos remain subject to their source rights and availability.",
+    "This is an independent concept, not an official business listing or an offer endorsed by the business. Review the live preview before purchasing.",
+  ].join("\n\n");
+  const intro = "A ready-built, unofficial website concept for ";
+  // Keep all purchase/delivery terms and the full preview URL when context is long.
+  const contextLimit = Math.max(0, 1500 - details.length - intro.length - 3);
+  return `${intro}${context.slice(0, contextLimit)}.\n\n${details}`;
+}
 // Same request retries replay; a changed request body gets a fresh key instead of a provider mismatch.
 const requestKey = (step: string, siteId: string, body: unknown) =>
   `whop-${step}-${siteId}-${createHash("sha256").update(JSON.stringify(body)).digest("hex").slice(0, 16)}`;
@@ -17,9 +49,13 @@ export async function listProduct(
   },
   name: string,
   amount: number,
+  brief?: Brief,
 ) {
   const client = whop();
   const headline = `Unofficial website concept for ${name}`.slice(0, 80);
+  const description = productDescription(name, site.preview_url, amount, brief);
+  if (description.length > 1500)
+    throw new Error("Whop description exceeds 1500 characters");
   // A listing whose publish failed is completed in place, never duplicated.
   const partial = (await rows("products", "site_id", site.id)).find(
     (row) => !row.verified,
@@ -33,7 +69,11 @@ export async function listProduct(
     });
     if (existing.metadata?.siteId !== site.id)
       throw new Error("Recorded Whop product belongs to another site");
-    product = await client.products.update({ id: existing.id, headline });
+    product = await client.products.update({
+      id: existing.id,
+      headline,
+      description,
+    });
     saved = partial;
     for await (const variant of await client.variants.list({
       account_id: env("WHOP_ACCOUNT_ID"),
@@ -77,7 +117,7 @@ export async function listProduct(
       account_id: env("WHOP_ACCOUNT_ID"),
       title: `Website for ${name}`.slice(0, 80),
       headline,
-      description: `Unofficial responsive website concept for ${name}. One-time purchase of React website source ZIP and deployment instructions. No hosting or domain service. Preview: ${site.preview_url}`,
+      description,
       route: `${slug(name)}-website-${site.id.slice(0, 8)}`,
       gallery_images: [{ id: file.id }],
       metadata: { siteId: site.id, leadId: site.business_id },
@@ -121,6 +161,8 @@ export async function listProduct(
   const published = await client.products.retrieve({ id: product.id });
   if (!published.gallery_images.length)
     throw new Error("Whop product screenshot missing");
+  if (published.description !== description)
+    throw new Error("Whop product description is missing or incomplete");
   await verifyProduct(
     storefront,
     plan.purchase_url,

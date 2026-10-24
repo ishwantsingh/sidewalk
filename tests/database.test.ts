@@ -163,3 +163,30 @@ describe("PostgreSQL persistence and invariants", () => {
     expect(tables.rows.every((row) => row.relrowsecurity)).toBe(true);
   });
 });
+
+it("removes the retired conversion fields in fresh and upgraded databases", async () => {
+  const columns = await pg.query<{ column_name: string }>(
+    "select column_name from information_schema.columns where table_name='opportunities'",
+  );
+  expect(columns.rows.map((column) => column.column_name)).not.toContain(
+    "purchase_probability",
+  );
+  expect(columns.rows.map((column) => column.column_name)).not.toContain(
+    "expected_contribution",
+  );
+  await pg.exec(
+    "alter table opportunities add column purchase_probability numeric, add column expected_contribution numeric",
+  );
+  const migration = await readFile(
+    "supabase/migrations/20261024_simple_selection.sql",
+    "utf8",
+  );
+  await pg.exec(migration);
+  await pg.exec(migration);
+  const after = await pg.query<{ column_name: string }>(
+    "select column_name from information_schema.columns where table_name='opportunities'",
+  );
+  expect(after.rows.map((column) => column.column_name)).toEqual(
+    columns.rows.map((column) => column.column_name),
+  );
+});

@@ -22,10 +22,7 @@ export async function waitForPublication(
         throw new Error("Published URL requires Lovable login");
       const html = (await response.text()).toLowerCase();
       const name = businessName.toLowerCase();
-      if (
-        (html.includes(name) || html.includes(name.replaceAll("&", "&amp;"))) &&
-        /unofficial concept.*not affiliated/s.test(html)
-      )
+      if (html.includes(name) || html.includes(name.replaceAll("&", "&amp;")))
         return;
       reason = "Public deployment has not served the business concept yet";
     } catch (error) {
