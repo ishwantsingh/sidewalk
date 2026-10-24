@@ -1,6 +1,5 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import {
-  areaBusinesses,
   DEFAULT_AREA,
   latestAudit,
   websiteStatus,
@@ -8,12 +7,8 @@ import {
 } from "../lib/map";
 
 describe("business map", () => {
-  it("defaults to Williamsburg and scopes markers to the selected neighborhood", () => {
-    const runs = [{ id: "run-1", params: { area: DEFAULT_AREA } }];
-    const businesses = [{ id: "business-1", run_id: "run-1" }];
-    expect(areaBusinesses(businesses, runs, DEFAULT_AREA)).toEqual(businesses);
-    expect(areaBusinesses(businesses, runs, "Unknown")).toEqual([]);
-    expect(areaBusinesses([], runs, DEFAULT_AREA)).toEqual([]);
+  it("fixes the map to Williamsburg", () => {
+    expect(DEFAULT_AREA).toBe("Williamsburg, Brooklyn");
   });
   it("uses audit evidence and keeps unknown or unaudited businesses gray", () => {
     expect(

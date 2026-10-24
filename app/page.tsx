@@ -39,14 +39,13 @@ export default function Dashboard() {
     [overview, setOverview] = useState<Row>({ orders: [], events: [] }),
     [missing, setMissing] = useState<string[]>([]),
     [ready, setReady] = useState(false),
-    [selectedRun, setSelectedRun] = useState(""),
     [detail, setDetail] = useState<Row | null>(null),
     [form, setForm] = useState(false),
     [buildTarget, setBuildTarget] = useState<Row | null>(null),
     [loading, setLoading] = useState(false),
     [filter, setFilter] = useState("ALL"),
     [search, setSearch] = useState(""),
-    [mapArea, setMapArea] = useState(DEFAULT_AREA);
+    [mapArea] = useState(DEFAULT_AREA);
   const refresh = useCallback(async () => {
     try {
       const config = await api("config");
@@ -148,17 +147,13 @@ export default function Dashboard() {
   function openBusiness(b: Row) {
     activeBusiness.current = b.id;
     businessTrigger.current = document.activeElement as HTMLElement;
-    const run = runs.find((r) => r.id === b.run_id);
-    if (run) setMapArea(run.params.area);
     void api(`businesses/${b.id}`)
       .then((value) => {
         if (activeBusiness.current === b.id) setDetail(value);
       })
       .catch((e) => setError(e.message));
   }
-  const scoped = businesses.filter(
-    (b) => !selectedRun || b.run_id === selectedRun,
-  );
+  const scoped = businesses;
   const list = scoped
     .filter(
       (b) =>
@@ -170,18 +165,8 @@ export default function Dashboard() {
         (b.opportunities?.[0]?.priority ?? 0) -
         (a.opportunities?.[0]?.priority ?? 0),
     );
-  const events = overview.events.filter(
-    (e: Row) => !selectedRun || e.run_id === selectedRun,
-  );
-  const orders = overview.orders.filter(
-    (o: Row) =>
-      !selectedRun ||
-      scoped.some((b) =>
-        b.sites?.some((s: Row) =>
-          s.products?.some((p: Row) => p.id === o.product_id),
-        ),
-      ),
-  );
+  const events = overview.events;
+  const orders = overview.orders;
   const summary = summarize(scoped, orders, events);
   const daily = dailyTotals(orders, events, new Date().toISOString());
   async function start(e: React.FormEvent<HTMLFormElement>) {
@@ -206,8 +191,6 @@ export default function Dashboard() {
         maxLovableRepairAttempts: 2,
         maxEstimatedRunCostUsd: Number(f.get("maxEstimatedRunCostUsd")),
       });
-      setSelectedRun(run.id);
-      setMapArea(run.params.area);
       setForm(false);
       await refresh();
     } catch (e) {
@@ -233,30 +216,6 @@ export default function Dashboard() {
         </button>
       </header>
       <main className="workspace" aria-busy={!ready}>
-        <div className="page-heading">
-          <h1>Overview</h1>
-          <select
-            aria-label="Filter by run"
-            value={selectedRun}
-            onChange={(e) => {
-              setSelectedRun(e.target.value);
-              const run = runs.find((r) => r.id === e.target.value);
-              if (run) setMapArea(run.params.area);
-              closeBusiness();
-            }}
-          >
-            <option value="">All runs</option>
-            {runs.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.params.area} ·{" "}
-                {new Date(r.created_at).toLocaleDateString("en-US", {
-                  month: "short",
-                  day: "numeric",
-                })}
-              </option>
-            ))}
-          </select>
-        </div>
         {error && (
           <div role="alert" className="notice error">
             {error}
@@ -268,29 +227,14 @@ export default function Dashboard() {
           <>
             <BusinessMap
               businesses={list}
-              runs={runs}
-              area={mapArea}
-              onAreaChange={(area) => {
-                setMapArea(area);
-                setSelectedRun("");
-                closeBusiness();
-              }}
               selectedId={detail?.id}
               onSelect={openBusiness}
-              onNewRun={() => {
-                setBuildTarget(null);
-                setForm(true);
-              }}
             >
               {detail && (
                 <BusinessDetails
                   detail={detail}
                   onClose={closeBusiness}
                   onBuild={(business) => {
-                    const sourceRun = runs.find(
-                      (run) => run.id === business.run_id,
-                    );
-                    if (sourceRun) setMapArea(sourceRun.params.area);
                     setBuildTarget(business);
                     closeBusiness();
                     setForm(true);
@@ -372,7 +316,6 @@ export default function Dashboard() {
                         "Priority",
                         "Sale price",
                         "Build estimate",
-                        "Expected value",
                         "Stage",
                       ].map((s) => (
                         <th key={s}>{s}</th>
@@ -386,12 +329,12 @@ export default function Dashboard() {
                       return (
                         <tr key={b.id}>
                           <td>
-                            <button
+                            <a
                               className="business-link"
-                              onClick={() => openBusiness(b)}
+                              href={`/businesses/${b.id}`}
                             >
                               {b.name}
-                            </button>
+                            </a>
                             <small>{b.category}</small>
                           </td>
                           <td>
@@ -409,7 +352,6 @@ export default function Dashboard() {
                           <td className="muted">
                             {money(o?.estimated_build_cost)}
                           </td>
-                          <td>{money(o?.expected_contribution)}</td>
                           <td>
                             <span className="stage">{label(b.state)}</span>
                           </td>
@@ -426,9 +368,7 @@ export default function Dashboard() {
                   </div>
                 )}
               </div>
-              <p className="table-note">
-                Build costs and expected values are estimates.
-              </p>
+              <p className="table-note">Build costs are estimates.</p>
             </section>
             <section className="activity">
               <h2>Recent activity</h2>
@@ -500,7 +440,7 @@ export default function Dashboard() {
                 Neighborhood or city
                 <input
                   name="area"
-                  readOnly={!!buildTarget}
+                  readOnly
                   defaultValue={mapArea}
                   placeholder="Williamsburg, Brooklyn, NY"
                   required

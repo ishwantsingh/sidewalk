@@ -43,14 +43,17 @@ try {
     await new Promise((r) => setTimeout(r, 200));
   }
   assert(ready, "App did not start");
-  browser = await chromium.launch({ headless: true });
+  browser = await chromium.launch({
+    headless: true,
+    executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
+  });
   const page = await browser.newPage({
     viewport: { width: 1440, height: 1080 },
   });
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.stack ?? error.message));
   await page.goto(origin);
-  await page.getByRole("heading", { name: "Overview", exact: true }).waitFor();
+  await page.getByRole("link", { name: "sidewalk", exact: true }).waitFor();
   // A complete configuration must show only API records, including a genuinely empty database.
   await page.route("**/api/config", (route) =>
     route.fulfill({ json: { missing: [] } }),
@@ -74,7 +77,7 @@ try {
   await page.route("**/api/runs", async (route) => {
     if (route.request().method() === "POST") {
       const body = route.request().postDataJSON();
-      assert.equal(body.area, "Brooklyn");
+      assert.equal(body.area, "Williamsburg, Brooklyn");
       assert.equal(body.maxSalesTasks, body.selectedBusinessId ? 1 : 2);
       assert.equal(body.maxRealEmails, body.selectedBusinessId ? 1 : 2);
       if (body.selectedBusinessId) {
@@ -127,38 +130,24 @@ try {
   );
   await page.reload();
   await page
-    .getByRole("button", { name: "Live business", exact: true })
+    .getByRole("link", { name: "Live business", exact: true })
     .waitFor();
   assert.equal(await page.locator("tbody tr").count(), 1);
   assert.equal(
     await page.getByText("Sunday Coffee", { exact: true }).count(),
     0,
   );
-  await page
-    .getByRole("button", { name: "Live business", exact: true })
-    .click();
+  await page.getByRole("link", { name: "Live business", exact: true }).click();
   await page.getByRole("region", { name: "Live business" }).waitFor();
-  await page
-    .getByRole("button", { name: "Build a concept for this business" })
-    .click();
-  await page.getByRole("dialog", { name: "Build selected business" }).waitFor();
-  assert.equal(
-    await page.getByRole("combobox", { name: "Business category" }).count(),
-    0,
-  );
-  assert.equal(
-    await page
-      .getByRole("spinbutton", { name: "Maximum site builds" })
-      .inputValue(),
-    "1",
-  );
-  await page.getByRole("button", { name: "Start run", exact: true }).click();
-  await page.waitForFunction(() => !document.querySelector('[role="dialog"]'));
+  assert.equal(new URL(page.url()).pathname, "/businesses/live-business");
+  await page.getByRole("link", { name: "All businesses" }).click();
 
   await page.getByRole("button", { name: "New run" }).click();
-  await page
-    .getByRole("textbox", { name: "Neighborhood or city" })
-    .fill("Brooklyn");
+  assert(
+    (await page
+      .getByRole("textbox", { name: "Neighborhood or city" })
+      .getAttribute("readonly")) !== null,
+  );
   await page
     .getByRole("checkbox", {
       name: "Require both a sourced email and phone before building",
@@ -167,12 +156,16 @@ try {
   await page.getByRole("button", { name: "Start run", exact: true }).click();
   await page.waitForFunction(() => !document.querySelector('[role="dialog"]'));
   assert.equal(
-    await page.getByRole("combobox", { name: "Filter by run" }).inputValue(),
-    "live-run",
+    await page.getByRole("combobox", { name: "Filter by run" }).count(),
+    0,
   );
   assert.equal(
-    await page.getByRole("combobox", { name: "Map neighborhood" }).inputValue(),
-    "Brooklyn",
+    await page.getByRole("combobox", { name: "Map neighborhood" }).count(),
+    0,
+  );
+  assert.equal(
+    await page.getByRole("columnheader", { name: "Expected value" }).count(),
+    0,
   );
   // Incomplete sales setup still displays actual database records.
   await page.route("**/api/config", (route) =>
@@ -180,7 +173,7 @@ try {
   );
   await page.reload();
   await page
-    .getByRole("button", { name: "Live business", exact: true })
+    .getByRole("link", { name: "Live business", exact: true })
     .waitFor();
   assert.equal(await page.locator("tbody tr").count(), 1);
   await page.getByRole("button", { name: "New run" }).click();

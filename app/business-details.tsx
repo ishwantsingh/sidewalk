@@ -18,7 +18,7 @@ export function BusinessDetails({
   onBuild,
 }: {
   detail: Row;
-  onClose: () => void;
+  onClose?: () => void;
   onRetry: (id: string) => void;
   onBuild?: (business: Row) => void;
 }) {
@@ -30,10 +30,13 @@ export function BusinessDetails({
       aria-label={detail.name}
       tabIndex={-1}
     >
-      <button className="close" aria-label="Close detail" onClick={onClose}>
-        ×
-      </button>
+      {onClose && (
+        <button className="close" aria-label="Close detail" onClick={onClose}>
+          ×
+        </button>
+      )}
       <h2>{detail.name}</h2>
+      {onClose && <a href={`/businesses/${detail.id}`}>Show all details ↗</a>}
       <p>
         {detail.category} <span className="stage">{label(detail.state)}</span>
       </p>
@@ -43,6 +46,7 @@ export function BusinessDetails({
         </div>
       )}
       <h3>Website audit</h3>
+      {detail.address && <p>{detail.address}</p>}
       <p>
         {websiteStatuses[websiteStatus(detail)].label} · {audit?.score ?? "N/A"}
         {audit?.score != null ? " / 100" : ""}
@@ -117,6 +121,17 @@ export function BusinessDetails({
               Open unofficial concept ↗
             </a>
           )}
+          {detail.sites[0].lovable_project_id && (
+            <p>
+              <a
+                href={`https://lovable.dev/projects/${encodeURIComponent(detail.sites[0].lovable_project_id)}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Lovable project ↗
+              </a>
+            </p>
+          )}
           {detail.products?.[0]?.storefront_url && (
             <p>
               <a
@@ -177,6 +192,54 @@ export function BusinessDetails({
                 : ""}
             </p>
             {task.error && <p className="error">{task.error}</p>}
+            {task.brief && (
+              <details open>
+                <summary>Salesperson brief</summary>
+                <p>{task.brief.offer}</p>
+                <p>{task.brief.instructions}</p>
+                {task.brief.liveWebsite && (
+                  <p>
+                    <a
+                      href={task.brief.liveWebsite}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Website concept ↗
+                    </a>
+                  </p>
+                )}
+                {task.brief.storefront && (
+                  <p>
+                    <a
+                      href={task.brief.storefront}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Whop listing ↗
+                    </a>
+                  </p>
+                )}
+                {task.brief.checkout && (
+                  <p>
+                    <a
+                      href={task.brief.checkout}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Whop checkout ↗
+                    </a>
+                  </p>
+                )}
+                {task.brief.salesEmail?.subject && (
+                  <>
+                    <h4>{task.brief.salesEmail.subject}</h4>
+                    <p style={{ whiteSpace: "pre-wrap" }}>
+                      {task.brief.salesEmail.body}
+                    </p>
+                  </>
+                )}
+              </details>
+            )}
             {task.report && (
               <>
                 <p>
@@ -232,6 +295,14 @@ export function BusinessDetails({
             <p>{e.reason}</p>
           </div>
         ))}
+      {!onClose && (
+        <details>
+          <summary>Complete business record</summary>
+          <pre className="business-record">
+            {JSON.stringify(detail, null, 2)}
+          </pre>
+        </details>
+      )}
     </section>
   );
 }
