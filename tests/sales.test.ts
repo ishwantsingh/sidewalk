@@ -1,5 +1,6 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
-import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import { ToolSchema, type Tool } from "@modelcontextprotocol/sdk/types.js";
+import liveTools from "./fixtures/terac-tools.json";
 const f = vi.hoisted(() => ({
   insert: vi.fn(),
   update: vi.fn(),
@@ -55,26 +56,10 @@ const job = {
   terac_opportunity_id: "opp-1",
   max_cost_usd: 20,
 };
-const createTool = {
-  name: "terac_create_opportunity",
-  inputSchema: {
-    type: "object",
-    properties: Object.fromEntries(
-      [
-        "project_id",
-        "internal_title",
-        "title",
-        "description",
-        "candidate_profile",
-        "business_type",
-        "num_participants",
-        "expected_days_to_complete",
-        "screening_questions",
-        "tasks",
-      ].map((key) => [key, {}]),
-    ),
-  },
-} as Tool;
+const capturedTools = liveTools.map((tool) => ToolSchema.parse(tool));
+const createTool = capturedTools.find(
+  (tool) => tool.name === "terac_create_opportunity",
+)!;
 function client() {
   return {
     tools: [createTool],
@@ -162,14 +147,75 @@ describe("sales context and contract", () => {
     expect(input.tasks).toHaveLength(1);
     expect(input.tasks[0]).toMatchObject({
       review_type: "manual_review",
-      task_type: "activity",
+      task_type: "interview",
+      duration_minutes: 20,
     });
     expect(input.tasks[0].task_url).toMatch(
       /^https:\/\/sidewalk.test\/sales\/task-1\?signature=[a-f0-9]{64}$/,
     );
     expect(JSON.stringify(input)).not.toContain(brief.contactPhone);
+    expect(input).not.toHaveProperty("candidate_profile");
+    expect(input.description).toContain("experienced English-speaking");
+    expect(input.expected_days_to_complete).toBe(5);
+    expect(input.customer_screening_review).toBe("auto_invite");
+    expect(input.filters).toEqual([
+      { "multi_select--country": { $in: ["US"] } },
+      { "multi_select--language": { $in: ["en-US"] } },
+      { "integer--age": { $gte: 18 } },
+    ]);
+    expect(input).not.toHaveProperty("unrestricted_audience");
+    expect(input.screening_questions[0].answers).toContainEqual({
+      text: "No",
+      qualify_logic: "reject",
+    });
+    expect(teracArguments(createTool, input)).toEqual(input);
     vi.stubEnv("APP_URL", "http://localhost:3000");
     expect(() => salesOpportunity(job)).toThrow("public HTTPS");
+  });
+  it("rejects the obsolete profile field and one-day recruitment window against the live schema", () => {
+    const input = salesOpportunity(job);
+    expect(() =>
+      teracArguments(createTool, {
+        ...input,
+        candidate_profile: "salesperson",
+      }),
+    ).toThrow("does not support candidate_profile");
+    expect(() =>
+      teracArguments(createTool, { ...input, expected_days_to_complete: 1 }),
+    ).toThrow("contract");
+    expect(() =>
+      teracArguments(createTool, {
+        ...input,
+        tasks: [{ ...input.tasks[0], duration_minutes: 0 }],
+      }),
+    ).toThrow("contract");
+  });
+  it("validates lifecycle parameter normalization against the captured provider contracts", () => {
+    for (const [name, values, expected] of [
+      [
+        "terac_get_opportunity",
+        { opportunity_id: "opp-1" },
+        { opportunityId: "opp-1" },
+      ],
+      [
+        "terac_launch_draft_opportunity",
+        { opportunity_id: "opp-1" },
+        { opportunityId: "opp-1" },
+      ],
+      [
+        "terac_get_submission",
+        { submission_id: "sub-1" },
+        { submissionId: "sub-1" },
+      ],
+      [
+        "terac_approve_submission",
+        { submission_id: "sub-1" },
+        { submissionId: "sub-1" },
+      ],
+    ] as const) {
+      const tool = capturedTools.find((t) => t.name === name)!;
+      expect(teracArguments(tool, values)).toEqual(expected);
+    }
   });
   it("rejects unsupported fields, missing required fields and invalid nested values", () => {
     const tool = {
@@ -224,6 +270,22 @@ describe("sales context and contract", () => {
   });
 });
 describe("durable recruitment", () => {
+  it("creates the complete validated assignment before checking its quote and launching", async () => {
+    const terac = client();
+    await processSalesTask({ ...job, status: "QUEUED" }, terac);
+    expect(terac.call.mock.calls.map(([name]) => name)).toEqual([
+      "terac_create_opportunity",
+      "terac_get_opportunity",
+      "terac_launch_draft_opportunity",
+    ]);
+    const created = terac.call.mock.calls[0][1];
+    expect(teracArguments(createTool, created)).toEqual(salesOpportunity(job));
+    expect(created).not.toHaveProperty("candidate_profile");
+    expect(created.tasks[0]).toMatchObject({
+      task_type: "interview",
+      review_type: "manual_review",
+    });
+  });
   it("refuses a quote above the reserved allowance before launch", async () => {
     const terac = client();
     await expect(

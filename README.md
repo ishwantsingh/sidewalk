@@ -62,6 +62,8 @@ Unknown creation, launch or approval outcomes become `NEEDS_REVIEW`, with no aut
 
 Terac's MCP and newer API documentation differ on pricing details. The adapter validates every supplied field against advertised MCP schemas and fails explicitly on unsupported contracts. `npm run doctor` must pass against your actual account before a live run. Local tests cannot prove recruitment, caller availability or payment acceptance.
 
+The current MCP create contract uses explicit US, English-speaking, adult audience filters and a qualifying sales-experience/phone-capability screener. Qualified applicants are auto-invited; the call report still requires manual review before payment. The salesperson requirements are in the description and screener because `candidate_profile` is not writable through this API. The signed brief/report page uses Terac's URL-backed `interview` task type with the existing 20-minute estimate. Terac requires a minimum five-day recruitment window; this is the recruitment deadline, not a five-day assignment or a promise of immediate recruitment. After accepting, the caller is instructed to finish within 30 minutes during business hours. Captured live schemas under `tests/fixtures/` guard against the previous unsupported profile field and one-day window.
+
 ## Payment and delivery setup
 
 Deploy the Next.js app behind HTTPS. Set `APP_URL` to its public origin. In Whop, register:

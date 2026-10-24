@@ -1,0 +1,558 @@
+[
+  {
+    "name": "terac_get_context",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    }
+  },
+  {
+    "name": "terac_get_opportunity",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "opportunityId": {
+          "type": "string"
+        }
+      },
+      "required": ["opportunityId"],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    }
+  },
+  {
+    "name": "terac_get_submission",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "submissionId": {
+          "type": "string"
+        }
+      },
+      "required": ["submissionId"],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    }
+  },
+  {
+    "name": "terac_approve_submission",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "submissionId": {
+          "type": "string"
+        }
+      },
+      "required": ["submissionId"],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    }
+  },
+  {
+    "name": "terac_create_opportunity",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "internal_title": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 8000
+        },
+        "project_id": {
+          "type": "string"
+        },
+        "num_participants": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "business_type": {
+          "type": "string",
+          "enum": ["b2c", "b2b"]
+        },
+        "customer_screening_review": {
+          "type": "string",
+          "enum": ["auto_invite", "manual_review"]
+        },
+        "tasks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "sequence": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "task_type": {
+                "type": "string",
+                "enum": ["interview", "file_upload", "activity"]
+              },
+              "review_type": {
+                "type": "string",
+                "enum": ["auto_approve", "manual_review", "self_report"]
+              },
+              "task_url": {
+                "type": "string",
+                "format": "uri"
+              },
+              "title": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "duration_minutes": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "instructions": {
+                "type": "string",
+                "maxLength": 4000
+              },
+              "accepted_mime_types": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "min_files": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 20
+              },
+              "max_files": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 20
+              },
+              "max_file_size_bytes": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              }
+            },
+            "required": ["sequence", "task_type", "review_type"],
+            "additionalProperties": false
+          },
+          "minItems": 1
+        },
+        "filters": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "unrestricted_audience": {
+          "type": "boolean"
+        },
+        "screening_questions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1
+              },
+              "question_rich_text": {
+                "type": "string"
+              },
+              "pick": {
+                "type": "string",
+                "enum": ["one", "any", "boolean", "text", "grid"]
+              },
+              "answers": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "qualify_logic": {
+                      "type": "string",
+                      "enum": ["may", "must", "must_one_of", "reject", "review"]
+                    },
+                    "allow_free_text": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["text", "qualify_logic"],
+                  "additionalProperties": false
+                },
+                "minItems": 2
+              },
+              "grid": {
+                "type": "object",
+                "properties": {
+                  "pick": {
+                    "type": "string",
+                    "enum": ["one", "any"]
+                  },
+                  "rows": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "text": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["text"],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1
+                  },
+                  "columns": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "value": {
+                          "type": "string"
+                        },
+                        "text": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["text"],
+                      "additionalProperties": false
+                    },
+                    "minItems": 2
+                  },
+                  "cell_actions": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "row": {
+                          "type": "string"
+                        },
+                        "column": {
+                          "type": "string"
+                        },
+                        "qualify_logic": {
+                          "type": "string",
+                          "enum": ["may", "must", "must_one_of", "reject"]
+                        }
+                      },
+                      "required": ["row", "column", "qualify_logic"],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": ["rows", "columns"],
+                "additionalProperties": false
+              },
+              "min_qualifying": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "display_condition": {
+                "type": "object",
+                "properties": {
+                  "conditions": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "screening_question": {
+                          "type": "string"
+                        },
+                        "answer": {
+                          "type": "string"
+                        },
+                        "operator": {
+                          "type": "string",
+                          "enum": ["eq", "ne"],
+                          "default": "eq"
+                        }
+                      },
+                      "required": ["screening_question", "answer"],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 26
+                  },
+                  "join": {
+                    "type": "string",
+                    "enum": ["and", "or"],
+                    "default": "and"
+                  }
+                },
+                "required": ["conditions"],
+                "additionalProperties": false
+              },
+              "conditional_rules": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "conditions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "screening_question": {
+                            "type": "string"
+                          },
+                          "answer": {
+                            "type": "string"
+                          },
+                          "operator": {
+                            "type": "string",
+                            "enum": ["eq", "ne"],
+                            "default": "eq"
+                          }
+                        },
+                        "required": ["answer"],
+                        "additionalProperties": false
+                      },
+                      "minItems": 1,
+                      "maxItems": 26
+                    },
+                    "join": {
+                      "type": "string",
+                      "enum": ["and", "or"],
+                      "default": "and"
+                    },
+                    "outcome": {
+                      "type": "string",
+                      "enum": ["reject", "review"]
+                    }
+                  },
+                  "required": ["conditions", "outcome"],
+                  "additionalProperties": false
+                }
+              },
+              "skip_rules": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "conditions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "screening_question": {
+                            "type": "string"
+                          },
+                          "answer": {
+                            "type": "string"
+                          },
+                          "operator": {
+                            "type": "string",
+                            "enum": ["eq", "ne"]
+                          }
+                        },
+                        "required": [
+                          "screening_question",
+                          "answer",
+                          "operator"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "minItems": 1,
+                      "maxItems": 26
+                    },
+                    "join": {
+                      "type": "string",
+                      "enum": ["and", "or"]
+                    },
+                    "target_question": {
+                      "type": ["string", "null"]
+                    }
+                  },
+                  "required": ["conditions", "join", "target_question"],
+                  "additionalProperties": false
+                }
+              },
+              "allow_paste": {
+                "type": "boolean"
+              }
+            },
+            "required": ["text", "pick"],
+            "additionalProperties": false
+          }
+        },
+        "quotas": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "screening_question": {
+                "type": "string"
+              },
+              "targets": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": ["exact", "minimum", "maximum"]
+                    }
+                  },
+                  "required": ["value", "count"],
+                  "additionalProperties": false
+                },
+                "minItems": 1
+              }
+            },
+            "required": ["screening_question", "targets"],
+            "additionalProperties": false
+          }
+        },
+        "cross_quotas": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "conditions": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "screening_question": {
+                      "type": "string"
+                    },
+                    "answer": {
+                      "type": "string"
+                    },
+                    "operator": {
+                      "type": "string",
+                      "enum": ["eq", "ne"],
+                      "default": "eq"
+                    }
+                  },
+                  "required": ["screening_question", "answer"],
+                  "additionalProperties": false
+                },
+                "minItems": 1,
+                "maxItems": 26
+              },
+              "join": {
+                "type": "string",
+                "enum": ["and", "or"],
+                "default": "and"
+              },
+              "target": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "quota_type": {
+                "type": "string",
+                "enum": ["exact", "minimum", "maximum"],
+                "default": "minimum"
+              },
+              "dimension": {
+                "type": "string"
+              }
+            },
+            "required": ["label", "conditions", "target"],
+            "additionalProperties": false
+          },
+          "maxItems": 200
+        },
+        "device_types": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "desktop",
+              "mobile_ios",
+              "mobile_android",
+              "tablet_ios",
+              "tablet_android",
+              "other"
+            ]
+          }
+        },
+        "expected_days_to_complete": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 50000000
+        },
+        "feasibility_request_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "project_id",
+        "num_participants",
+        "business_type",
+        "tasks"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    }
+  },
+  {
+    "name": "terac_launch_draft_opportunity",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "opportunityId": {
+          "type": "string"
+        },
+        "without_screener": {
+          "type": "boolean"
+        }
+      },
+      "required": ["opportunityId"],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    }
+  }
+]

@@ -109,16 +109,21 @@ export function salesOpportunity(task: Row) {
     internal_title: `Sidewalk sales ${task.id}`,
     title: "Make one small-business website sales call",
     description:
-      "Call one business owner about an already-built website. Review the supplied brief, show the live preview, explain the one-time source-code offer, direct them to Whop checkout and report the outcome. Complete within 30 minutes of accepting, during local business hours. Paid for a genuine call attempt and report; a sale is not guaranteed.",
-    candidate_profile:
-      "Experienced English-speaking outbound salesperson or SDR who has sold websites or digital services to US small businesses. Must be able to place a real phone call during the business's local opening hours and accurately log the result.",
+      "Call one business owner about an already-built website. Review the supplied brief, show the live preview, explain the one-time source-code offer, direct them to Whop checkout and report the outcome. Complete within 30 minutes of accepting, during local business hours. Paid for a genuine call attempt and report; a sale is not guaranteed. Seeking an experienced English-speaking outbound salesperson or SDR who has sold websites or digital services to US small businesses and can place a real phone call and accurately log the result.",
     business_type: "b2b",
     num_participants: 1,
-    expected_days_to_complete: 1,
+    // Terac's minimum recruitment window; the accepted assignment is still 20 minutes.
+    expected_days_to_complete: 5,
+    customer_screening_review: "auto_invite",
+    filters: [
+      { "multi_select--country": { $in: ["US"] } },
+      { "multi_select--language": { $in: ["en-US"] } },
+      { "integer--age": { $gte: 18 } },
+    ],
     screening_questions: [
       {
         key: "sales_experience",
-        text: "Have you personally made outbound sales calls offering websites or digital services to small-business owners?",
+        text: "Have you personally made outbound sales calls offering websites or digital services to small-business owners, and can you place a real English-language call during the business's local opening hours and submit a written outcome report?",
         pick: "one",
         answers: [
           { text: "Yes", qualify_logic: "must" },
@@ -129,7 +134,8 @@ export function salesOpportunity(task: Row) {
     tasks: [
       {
         sequence: 1,
-        task_type: "activity",
+        // The signed Sidewalk page both displays the brief and collects the report.
+        task_type: "interview",
         review_type: "manual_review",
         title: "Call the business and submit your outcome",
         duration_minutes: 20,
