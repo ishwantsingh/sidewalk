@@ -2,7 +2,7 @@
 
 An autonomous local website agency: Google Places → independent Exa research → real browser audit → Lovable → clean source ZIP → individual Whop product → sales email + Terac salesperson → verified payment → automatic private ZIP delivery.
 
-Next.js operator dashboard, one persistent TypeScript worker, Supabase Postgres/Storage. When integrations are missing, the dashboard displays labeled sample data from `data/dashboard-demo.json`. Demo records stay in the UI; the worker and APIs still require real configuration and never simulate provider successes.
+Next.js operator dashboard, one persistent TypeScript worker, Supabase Postgres/Storage. The dashboard always reads persisted Supabase records, even while sales or delivery integrations are incomplete. Empty databases stay empty and connection failures stay visible. Run creation and worker startup require valid configuration.
 
 ## Start locally
 
@@ -18,10 +18,10 @@ cp .env.example .env.local
 1. Run [`supabase/schema.sql`](supabase/schema.sql) in your Supabase SQL editor. It creates eleven tables, transactional run/cost functions, a private `website-zips` bucket and a public screenshot bucket. Keep the ZIP bucket private. Table RLS grants no browser access; the service-role key stays server-side.
 2. Fill `.env.local` using the notes below. Use a long random download-signing secret. Do not prefix secrets with `NEXT_PUBLIC_`.
 3. Connect Lovable: `npm run lovable:auth`. Open the printed authorization URL. The local callback verifies OAuth state and saves client credentials/tokens to the ignored `.env.local`. Choose a workspace with permission to create and deploy projects; set `LOVABLE_WORKSPACE_ID` when your account has multiple workspaces. MCP authentication uses **OAuth**, not an API key. Token refresh requires a writable `.env.local`; revoked/expired authorization needs the login command again.
-4. Run `npm run doctor`. This checks Docker, Chromium, schema, bucket privacy, the verified sender, Whop account, and the actual Lovable and Terac tool schemas without launching recruitment or sending email.
-5. Start `npm run dev` and **in another terminal** `npm run worker`. Open [localhost:3000](http://localhost:3000), start a run. The dashboard reads persisted provider events every five seconds when all integrations are configured. Before setup, explore the JSON demo with the same charts, filters, and business details. New run opens the configuration form; execution stays disabled until integrations are connected. Revenue and estimated spending show daily UTC totals for the last seven days; pipeline bars show recorded discovery, qualification, builds, listings, sales assignments, and deliveries. Internal purchases are excluded from revenue.
+4. Run `npm run doctor`. This checks every available integration independently: Docker, Chromium, all eleven tables, bucket privacy, sender verification, Whop account, Lovable/Terac contracts, OpenAI model access, Google Geocoding/Places, Exa search and Resend authentication. Missing dependencies skip only their own checks. It creates no run, websites, listings, sales tasks or emails; Google/Exa probes can consume API quota. Exit code 1 means setup is incomplete or a check failed.
+5. Start `npm run dev` and **in another terminal** `npm run worker`. Open [localhost:3000](http://localhost:3000), start a run. The dashboard reads persisted records every five seconds. New run opens the configuration form; execution stays disabled until all required values are present and valid. Local dashboard access works with a local APP_URL; execution requires a public HTTPS APP_URL for salesperson and buyer links. Revenue and estimated spending show daily UTC totals for the last seven days; pipeline bars show recorded discovery, qualification, builds, listings, sales assignments, and deliveries. Internal purchases are excluded from revenue.
 
-`npm run check` runs type checking, tests, and a production build. `npm run test:browser` then checks direct dashboard access, JSON demo data, map status colors and neighborhood selection, neutral dashboard styling, charts, search, run and website filters, business details, keyboard access, configuration gating, live empty states, fetch errors and 375/390 px layouts against a temporary local server; screenshots go to ignored `artifacts/`. The repository includes a local Node 22 development executable because older system Node releases cannot run current provider SDKs. Use Node 22 for installation and production as well.
+`npm run check` runs type checking, tests, and a production build. `npm run test:browser` then checks direct dashboard access, persisted API records with incomplete configuration, business details, keyboard access, configuration gating, empty states, fetch errors and salesperson reports against a temporary local server; screenshots go to ignored `artifacts/`. The repository includes a local Node 22 development executable because older system Node releases cannot run current provider SDKs. Use Node 22 for installation and production as well.
 
 ## Business map
 
@@ -29,7 +29,7 @@ The discovery map opens on **Williamsburg, Brooklyn** above the dashboard metric
 
 Set `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` to a **separate browser key** with Maps JavaScript API and Geocoding API enabled and billing configured. Restrict its HTTP referrers to your local and production origins and restrict its APIs. Never put the server `GOOGLE_MAPS_API_KEY` in a public variable. Optionally set `NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID` to your Google map ID; development uses Google's `DEMO_MAP_ID` by default. Restart development or rebuild production after changing public environment variables. See [Google's marker setup](https://developers.google.com/maps/documentation/javascript/advanced-markers/add-marker).
 
-Live marker locations are resolved from persisted Google place IDs, with four concurrent requests and in-memory reuse for the mounted map; coordinates are not persisted. Failed lookups remain counted as unlocated rather than being assigned invented positions. Without a browser key, demo mode shows a clearly labeled illustrative street map and fictional sample positions. This preview is not Google Maps or live business research. Live mode instead shows the connection instructions. The full inspector retains audit findings, source contacts, economics, generated sites, sales, delivery recovery, verified facts, and timeline.
+Live marker locations are resolved from persisted Google place IDs, with four concurrent requests and in-memory reuse for the mounted map; coordinates are not persisted. Failed lookups remain counted as unlocated rather than being assigned invented positions. Without a browser key, the map displays connection instructions. No illustrative markers or sample businesses are substituted. The full inspector retains audit findings, source contacts, economics, generated sites, sales, delivery recovery, verified facts, and timeline.
 
 ## Provider setup
 
@@ -99,18 +99,18 @@ The web app can also run on a Node-compatible Next.js host while the worker stay
 
 Dashboard endpoints do not require authentication. Errors are explicit JSON; no successful-looking fallbacks are returned.
 
-| Endpoint                                         | Purpose                                                |
-| ------------------------------------------------ | ------------------------------------------------------ |
-| `GET /api/config`                                | Missing configuration names, never values              |
-| `POST /api/runs`                                 | Validate and queue geographic inputs/caps              |
-| `GET /api/runs`, `GET /api/runs/:id`             | Runs and persisted event timeline                      |
-| `GET /api/businesses`, `GET /api/businesses/:id` | Ranked facts, audits, source/commerce/delivery details |
-| `GET /api/overview`                              | Persisted activity and order metrics                   |
-| `POST /api/webhooks/whop`                        | Signature-verified payment ingestion                   |
-| `GET /api/download/:token`                       | Buyer-authorized expiring source download              |
-| `GET/POST /api/opt-out/:id?signature=…`          | Signed suppression of future sales offers              |
-| `GET/POST /api/sales/:id?signature=…`            | Signed salesperson brief and validated call report     |
-| `POST /api/orders/:id/retry`                     | Failed-delivery retry                                  |
+| Endpoint                                         | Purpose                                                       |
+| ------------------------------------------------ | ------------------------------------------------------------- |
+| `GET /api/config`                                | Missing/invalid configuration names and reasons, never values |
+| `POST /api/runs`                                 | Validate and queue geographic inputs/caps                     |
+| `GET /api/runs`, `GET /api/runs/:id`             | Runs and persisted event timeline                             |
+| `GET /api/businesses`, `GET /api/businesses/:id` | Ranked facts, audits, source/commerce/delivery details        |
+| `GET /api/overview`                              | Persisted activity and order metrics                          |
+| `POST /api/webhooks/whop`                        | Signature-verified payment ingestion                          |
+| `GET /api/download/:token`                       | Buyer-authorized expiring source download                     |
+| `GET/POST /api/opt-out/:id?signature=…`          | Signed suppression of future sales offers                     |
+| `GET/POST /api/sales/:id?signature=…`            | Signed salesperson brief and validated call report            |
+| `POST /api/orders/:id/retry`                     | Failed-delivery retry                                         |
 
 ## Verification
 
@@ -118,6 +118,12 @@ Dashboard endpoints do not require authentication. Errors are explicit JSON; no 
 
 After configuration, run a real small run and open its previews, Whop products and Terac sales reports. Complete a genuine Whop checkout, then inspect automatic fulfillment and unpack/build the delivered ZIP. Run `npm run verify:live` to check persisted real evidence, two distinct validated archives, their storage checksums, exact storefronts, acknowledged sales emails, accepted call reports and paid Whop records. This command fails if the evidence is absent.
 
-**Live acceptance remains unverified until credentials are supplied, two actual sites are generated, a real Terac call report is accepted and a genuine purchase reaches the signed webhook.** Local tests and a successful app build cannot establish those facts.
+**Live acceptance remains unverified until preflight passes, two actual sites are generated, a real Terac call report is accepted and a genuine purchase reaches the signed webhook.** Local tests and a successful app build cannot establish those facts.
 
 Integration references: [Lovable MCP](https://docs.lovable.dev/integrations/lovable-mcp-server), [Whop current Products](https://docs.whop.com/api-reference/beta/products/create-product), [Whop Variants](https://docs.whop.com/api-reference/beta/variants/create-variant), [Whop webhooks](https://docs.whop.com/developer/guides/webhooks), [Exa Search](https://exa.ai/docs/reference/search), [Google Places](https://developers.google.com/maps/documentation/places/web-service/nearby-search), [Google data policies](https://developers.google.com/maps/documentation/places/web-service/policies), [Terac MCP](https://terac.com/docs/researchers/mcp).
+
+### Environment preflight limits
+
+`doctor` reports fixed diagnostic categories and variable names without printing secret values. It validates required URL, numeric, sender, signing-secret and OAuth-token formats before execution. It also flags a missing browser Maps key. Run blocking configuration includes public HTTPS `APP_URL`, unchanged Whop `ws_` webhook secret, verified Resend sender/domain, physical sender address and Terac organization key/project. Optional Lovable client secret/workspace and Google map ID remain optional. Set the browser Maps key separately with referrer restrictions; never copy the server key into a public variable.
+
+A passed read-only check proves only the operation it tested. Model lookup does not prove structured/vision generation; Places details does not prove Nearby Search permission; MCP tool listing does not prove creation/deployment or funding; account access does not prove Whop write permissions or payment delivery. Resend domain inspection requires a full-access key (a send-only key cannot pass domain verification). Browser Maps restrictions require a browser check. Provider writes and end-to-end fulfillment remain for the explicitly authorized live run and genuine checkout.

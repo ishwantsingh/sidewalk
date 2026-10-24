@@ -1,6 +1,5 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import demoData from "../data/dashboard-demo.json";
 import { summarize, dailyTotals, type Row } from "../lib/dashboard";
 import { BusinessMap } from "./business-map";
 import { BusinessDetails } from "./business-details";
@@ -39,7 +38,6 @@ export default function Dashboard() {
     [businesses, setBusinesses] = useState<Row[]>([]),
     [overview, setOverview] = useState<Row>({ orders: [], events: [] }),
     [missing, setMissing] = useState<string[]>([]),
-    [demo, setDemo] = useState(false),
     [ready, setReady] = useState(false),
     [selectedRun, setSelectedRun] = useState(""),
     [detail, setDetail] = useState<Row | null>(null),
@@ -48,21 +46,15 @@ export default function Dashboard() {
     [filter, setFilter] = useState("ALL"),
     [search, setSearch] = useState(""),
     [mapArea, setMapArea] = useState(DEFAULT_AREA);
-  const mode = useRef<boolean | null>(null);
   const refresh = useCallback(async () => {
     try {
       const config = await api("config");
-      const isDemo = config.missing.length > 0;
-      const [r, b, o] = isDemo
-        ? [demoData.runs, demoData.businesses, demoData.overview]
-        : await Promise.all([api("runs"), api("businesses"), api("overview")]);
-      if (mode.current !== isDemo) {
-        setSelectedRun("");
-        setDetail(null);
-      }
-      mode.current = isDemo;
       setMissing(config.missing);
-      setDemo(isDemo);
+      const [r, b, o] = await Promise.all([
+        api("runs"),
+        api("businesses"),
+        api("overview"),
+      ]);
       setRuns(r);
       setBusinesses(b);
       setOverview(o);
@@ -78,7 +70,7 @@ export default function Dashboard() {
     return () => clearInterval(timer);
   }, [refresh]);
   useEffect(() => {
-    if (!detail || demo) return;
+    if (!detail) return;
     const timer = setInterval(() => {
       void api(`businesses/${detail.id}`)
         .then((value) => {
@@ -87,7 +79,7 @@ export default function Dashboard() {
         .catch((e) => setError(e.message));
     }, 5000);
     return () => clearInterval(timer);
-  }, [detail?.id, demo]);
+  }, [detail?.id]);
   useEffect(() => {
     if (!detail) return;
     const panel = document.querySelector<HTMLElement>(
@@ -157,13 +149,11 @@ export default function Dashboard() {
     businessTrigger.current = document.activeElement as HTMLElement;
     const run = runs.find((r) => r.id === b.run_id);
     if (run) setMapArea(run.params.area);
-    if (demo) setDetail(b);
-    else
-      void api(`businesses/${b.id}`)
-        .then((value) => {
-          if (activeBusiness.current === b.id) setDetail(value);
-        })
-        .catch((e) => setError(e.message));
+    void api(`businesses/${b.id}`)
+      .then((value) => {
+        if (activeBusiness.current === b.id) setDetail(value);
+      })
+      .catch((e) => setError(e.message));
   }
   const scoped = businesses.filter(
     (b) => !selectedRun || b.run_id === selectedRun,
@@ -192,14 +182,10 @@ export default function Dashboard() {
       ),
   );
   const summary = summarize(scoped, orders, events);
-  const daily = dailyTotals(
-    orders,
-    events,
-    demo ? demoData.asOf : new Date().toISOString(),
-  );
+  const daily = dailyTotals(orders, events, new Date().toISOString());
   async function start(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (demo || !ready) return;
+    if (missing.length || !ready) return;
     setLoading(true);
     const f = new FormData(e.currentTarget);
     try {
@@ -230,7 +216,6 @@ export default function Dashboard() {
         <a className="brand" href="/">
           sidewalk
         </a>
-        {demo && <span className="demo-label">Demo data</span>}
         <button disabled={!ready} onClick={() => setForm(true)}>
           New run <span aria-hidden="true">＋</span>
         </button>
@@ -278,7 +263,6 @@ export default function Dashboard() {
                 setSelectedRun("");
                 closeBusiness();
               }}
-              demo={demo}
               selectedId={detail?.id}
               onSelect={openBusiness}
               onNewRun={() => setForm(true)}
@@ -470,7 +454,7 @@ export default function Dashboard() {
               Real searches, site builds, sales emails and Terac sales calls.
               Set your limits.
             </p>
-            {demo && (
+            {missing.length > 0 && (
               <div className="notice">
                 Connect integrations in .env.local and restart to run real
                 searches.<code>{missing.join(" · ")}</code>
@@ -570,7 +554,7 @@ export default function Dashboard() {
                 when a sourced address is available and a Terac call when a
                 sourced phone is available.
               </p>
-              <button disabled={loading || demo || !ready}>
+              <button disabled={loading || missing.length > 0 || !ready}>
                 {loading ? "Starting…" : "Start run"}
               </button>
             </form>

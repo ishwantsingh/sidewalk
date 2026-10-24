@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { unwrapWebhook } from "@whop/sdk/helpers";
 import { z } from "zod";
-import { env, missingConfig, runSchema } from "../../../lib/config";
+import {
+  env,
+  missingConfig,
+  configIssues,
+  runSchema,
+} from "../../../lib/config";
 import { verifySignature } from "../../../lib/mail";
 import { validSalesSignature } from "../../../lib/sales-access";
 import {
@@ -151,12 +156,12 @@ async function handler(request: Request, ctx: Context) {
       return response({ recorded: true });
     }
     if (route === "config" && method === "GET")
-      return response({ missing: missingConfig() });
+      return response({ missing: missingConfig(), issues: configIssues() });
     if (route === "runs" && method === "POST") {
       const missing = missingConfig();
       if (missing.length)
         return response(
-          { error: `Missing configuration: ${missing.join(", ")}` },
+          { error: `Missing or invalid configuration: ${missing.join(", ")}` },
           503,
         );
       const params = runSchema.parse(await request.json());

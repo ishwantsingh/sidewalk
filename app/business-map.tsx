@@ -6,7 +6,6 @@ import {
   areaBusinesses,
   DEFAULT_AREA,
   DEFAULT_CENTER,
-  samplePosition,
   websiteStatus,
   websiteStatuses,
   type WebsiteStatus,
@@ -26,7 +25,6 @@ export function BusinessMap({
   runs,
   area,
   onAreaChange,
-  demo,
   selectedId,
   onSelect,
   onNewRun,
@@ -36,7 +34,6 @@ export function BusinessMap({
   runs: Row[];
   area: string;
   onAreaChange: (area: string) => void;
-  demo: boolean;
   selectedId?: string;
   onSelect: (business: Row) => void;
   onNewRun: () => void;
@@ -74,13 +71,7 @@ export function BusinessMap({
   );
   // Polling must update results without re-geocoding or rebuilding every marker.
   const signature = JSON.stringify(
-    visible.map((b) => [
-      b.id,
-      b.place_id,
-      b.name,
-      websiteStatus(b),
-      demo ? samplePosition(b) : null,
-    ]),
+    visible.map((b) => [b.id, b.place_id, b.name, websiteStatus(b)]),
   );
   const rows = useRef(visible);
   rows.current = visible;
@@ -156,8 +147,8 @@ export function BusinessMap({
     async function worker() {
       while (pending.length && !disposed) {
         const business = pending.shift()!;
-        let position = demo ? samplePosition(business) : null;
-        if (!demo && business.place_id) {
+        let position: { lat: number; lng: number } | null = null;
+        if (business.place_id) {
           const id = business.place_id as string;
           if (!cache.current.has(id))
             cache.current.set(
@@ -227,7 +218,7 @@ export function BusinessMap({
       });
       markers.current = [];
     };
-  }, [google, signature, demo]);
+  }, [google, signature]);
 
   useEffect(() => {
     markers.current.forEach(({ marker, business, position, pin }) => {
@@ -243,11 +234,7 @@ export function BusinessMap({
       <div className="map-toolbar">
         <div>
           <h2>Explore businesses</h2>
-          <p>
-            {demo
-              ? "Sample businesses · illustrative locations"
-              : "Discovered businesses · latest website audits"}
-          </p>
+          <p>Discovered businesses · latest website audits</p>
         </div>
         <label className="map-area">
           <span className="sr-only">Map neighborhood</span>
@@ -292,23 +279,9 @@ export function BusinessMap({
             ref={element}
             aria-label={`Google map of ${area}`}
           />
-          {!browserKey && demo && (
-            <SampleMap
-              businesses={visible}
-              selectedId={selectedId}
-              onSelect={onSelect}
-              area={area}
-            />
-          )}
           {(!browserKey || error) && (
             <div className="map-connection" role="status">
-              <b>
-                {error
-                  ? "Map unavailable"
-                  : demo
-                    ? "Sample map"
-                    : "Connect Google Maps"}
-              </b>
+              <b>{error ? "Map unavailable" : "Connect Google Maps"}</b>
               <span>
                 {error ||
                   "Add NEXT_PUBLIC_GOOGLE_MAPS_API_KEY to .env.local and restart to load Google Maps."}
@@ -336,11 +309,7 @@ export function BusinessMap({
                   ? ` · ${unlocated} could not be located`
                   : ""}
             </span>
-            <span>
-              {demo
-                ? "Demo · not live research"
-                : "Select a business to inspect"}
-            </span>
+            <span>Select a business to inspect</span>
           </div>
         </div>
         {children || (
@@ -376,119 +345,5 @@ export function BusinessMap({
         )}
       </div>
     </section>
-  );
-}
-
-function SampleMap({
-  businesses,
-  selectedId,
-  onSelect,
-  area,
-}: {
-  businesses: Row[];
-  selectedId?: string;
-  onSelect: (b: Row) => void;
-  area: string;
-}) {
-  const offset =
-    area === "Greenpoint, Brooklyn"
-      ? { lat: 0.015, lng: 0.004 }
-      : { lat: 0, lng: 0 };
-  return (
-    <div
-      className="sample-map"
-      aria-label={`Illustrative sample map of ${area}`}
-    >
-      <svg
-        viewBox="0 0 1000 600"
-        preserveAspectRatio="xMidYMid slice"
-        aria-hidden="true"
-      >
-        <defs>
-          <pattern
-            id="blocks"
-            width="110"
-            height="85"
-            patternUnits="userSpaceOnUse"
-            patternTransform="rotate(-28 500 300)"
-          >
-            <rect width="110" height="85" fill="#f8f7f3" />
-            <rect
-              x="9"
-              y="9"
-              width="92"
-              height="67"
-              rx="3"
-              fill="#eae9e3"
-              stroke="#e0dfd7"
-            />
-          </pattern>
-        </defs>
-        <rect width="1000" height="600" fill="url(#blocks)" />
-        <path d="M0 0H210L185 150 120 310 70 440 0 510Z" fill="#cfdee1" />
-        <path
-          d="M240 0 220 140 150 330 90 470"
-          fill="none"
-          stroke="#faf9f6"
-          strokeWidth="20"
-        />
-        <path d="m695 0 120 135-140 86-117-135Z" fill="#dce4cf" />
-        <g
-          fill="#8b8e89"
-          fontSize="13"
-          fontFamily="Arial"
-          transform="rotate(-28 500 300)"
-        >
-          <text x="170" y="180">
-            WYTHE AVENUE
-          </text>
-          <text x="410" y="350">
-            BEDFORD AVENUE
-          </text>
-          <text x="650" y="520">
-            DRIGGS AVENUE
-          </text>
-          <text x="650" y="90">
-            McCarren Park
-          </text>
-        </g>
-        <text
-          x="30"
-          y="250"
-          fill="#8ca5ac"
-          fontSize="13"
-          transform="rotate(-70 30 250)"
-        >
-          EAST RIVER
-        </text>
-        <text x="380" y="440" fill="#9c9b94" fontSize="20" letterSpacing="5">
-          {area.split(",")[0].toUpperCase()}
-        </text>
-      </svg>
-      {businesses.map((b) => {
-        const p = samplePosition(b);
-        if (!p) return null;
-        const state = websiteStatuses[websiteStatus(b)];
-        return (
-          <button
-            key={b.id}
-            className={`sample-marker${selectedId === b.id ? " is-selected" : ""}`}
-            style={
-              {
-                left: `${25 + ((p.lng - offset.lng + 73.966) / 0.022) * 60}%`,
-                top: `${16 + ((40.727 - (p.lat - offset.lat)) / 0.023) * 61}%`,
-                "--pin-color": state.color,
-              } as React.CSSProperties
-            }
-            aria-label={`${b.name} · ${state.label}`}
-            aria-pressed={selectedId === b.id}
-            onClick={() => onSelect(b)}
-          >
-            <i />
-            <span>{b.name}</span>
-          </button>
-        );
-      })}
-    </div>
   );
 }

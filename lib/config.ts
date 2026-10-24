@@ -1,7 +1,7 @@
 import { z } from "zod";
 export function env(key: string): string {
   const value = process.env[key];
-  if (!value) throw new Error(`Missing environment variable: ${key}`);
+  if (!value?.trim()) throw new Error(`Missing environment variable: ${key}`);
   return value;
 }
 export function cost(key: string) {
@@ -71,5 +71,85 @@ export const required = [
   "PAYMENT_FEE_FIXED_USD",
 ];
 export function missingConfig() {
-  return required.filter((key) => !process.env[key]);
+  return configIssues().map((issue) => issue.key);
+}
+
+/** Names and fixed messages only: safe for the public configuration endpoint. */
+export function configIssues() {
+  const issues: { key: string; reason: string }[] = [];
+  for (const key of required) {
+    const value = process.env[key]?.trim();
+    if (!value) {
+      issues.push({ key, reason: "Missing" });
+      continue;
+    }
+    let reason = "";
+    if (/^(?:your[_ -]|replace[_ -]|changeme|placeholder|<)/i.test(value))
+      reason = "Replace placeholder";
+    else if (["APP_URL", "SUPABASE_URL", "LOVABLE_MCP_URL"].includes(key)) {
+      try {
+        const url = new URL(value);
+        if (
+          !["https:", "http:"].includes(url.protocol) ||
+          url.username ||
+          url.password ||
+          url.search ||
+          url.hash
+        )
+          reason = "Use an HTTP(S) URL without credentials, query or fragment";
+        else if (
+          key === "APP_URL" &&
+          (url.protocol !== "https:" ||
+            ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) ||
+            url.pathname !== "/")
+        )
+          reason = "Public HTTPS origin required for sales and buyer links";
+      } catch {
+        reason = "Invalid URL";
+      }
+    } else if (
+      key.startsWith("COST_") ||
+      [
+        "TERAC_MAX_TASK_COST_USD",
+        "SALE_PRICE_USD",
+        "PAYMENT_FEE_PERCENT",
+        "PAYMENT_FEE_FIXED_USD",
+      ].includes(key)
+    ) {
+      const number = Number(value);
+      if (
+        !Number.isFinite(number) ||
+        number < 0 ||
+        (["SALE_PRICE_USD", "TERAC_MAX_TASK_COST_USD"].includes(key) &&
+          number === 0) ||
+        (key === "PAYMENT_FEE_PERCENT" && number > 100)
+      )
+        reason = "Invalid numeric amount";
+    } else if (key === "DOWNLOAD_SIGNING_SECRET" && value.length < 32)
+      reason = "Use at least 32 random characters";
+    else if (key === "WHOP_WEBHOOK_SECRET" && !/^ws_.+/.test(value))
+      reason = "Use the unchanged ws_ webhook signing secret";
+    else if (
+      key === "EMAIL_FROM" &&
+      !/^[^<>\s@]+@[^<>\s@]+\.[^<>\s@]+$/.test(value) &&
+      !/^[^<>]+<[^<>\s@]+@[^<>\s@]+\.[^<>\s@]+>$/.test(value)
+    )
+      reason = "Invalid sender email";
+    else if (key === "LOVABLE_OAUTH_TOKENS") {
+      try {
+        const tokens = JSON.parse(value);
+        if (
+          !tokens ||
+          typeof tokens.access_token !== "string" ||
+          !tokens.access_token.trim() ||
+          typeof tokens.token_type !== "string"
+        )
+          reason = "OAuth token object requires access_token and token_type";
+      } catch {
+        reason = "Invalid OAuth token JSON";
+      }
+    }
+    if (reason) issues.push({ key, reason });
+  }
+  return issues;
 }

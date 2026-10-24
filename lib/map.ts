@@ -27,16 +27,3 @@ export function areaBusinesses(businesses: Row[], runs: Row[], area: string) {
   );
   return businesses.filter((b) => runIds.has(b.run_id));
 }
-
-export function samplePosition(
-  business: Row,
-): { lat: number; lng: number } | null {
-  const p = business.demo_location;
-  return p &&
-    Number.isFinite(p.lat) &&
-    Number.isFinite(p.lng) &&
-    Math.abs(p.lat) <= 90 &&
-    Math.abs(p.lng) <= 180
-    ? p
-    : null;
-}

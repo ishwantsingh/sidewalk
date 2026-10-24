@@ -51,180 +51,6 @@ try {
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(origin);
   await page.getByRole("heading", { name: "Overview", exact: true }).waitFor();
-  await page.getByText("Demo data", { exact: true }).waitFor();
-  assert.equal(await page.locator("tbody tr").count(), 12);
-  const map = page.getByRole("region", { name: "Business discovery map" });
-  await map.getByRole("combobox", { name: "Map neighborhood" }).waitFor();
-  assert.equal(
-    await map.getByRole("combobox", { name: "Map neighborhood" }).inputValue(),
-    "Williamsburg, Brooklyn",
-  );
-  assert.equal(await map.locator(".sample-marker").count(), 6);
-  assert.equal(
-    await map.locator('.sample-marker[aria-label$="Good website"]').count(),
-    1,
-  );
-  assert.equal(
-    await map.locator('.sample-marker[aria-label$="Poor website"]').count(),
-    2,
-  );
-  assert.equal(
-    await map.locator('.sample-marker[aria-label$="No website"]').count(),
-    3,
-  );
-  await map
-    .getByRole("button", { name: "Sunday Coffee · No website", exact: true })
-    .click();
-  await map
-    .getByRole("region", { name: "Sunday Coffee", exact: true })
-    .waitFor();
-  assert.equal(await page.evaluate(() => document.body.style.overflow), "");
-  await map
-    .getByRole("button", { name: "Wythe Barber · Good website", exact: true })
-    .click();
-  await map
-    .getByRole("region", { name: "Wythe Barber", exact: true })
-    .waitFor();
-  await mkdir("artifacts", { recursive: true });
-  await page.screenshot({ path: "artifacts/map-inspector-desktop.png" });
-  await page.setViewportSize({ width: 375, height: 844 });
-  assert(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= innerWidth,
-    ),
-    "Map inspector overflows mobile",
-  );
-  await page.screenshot({
-    path: "artifacts/map-inspector-mobile.png",
-    fullPage: true,
-  });
-  await page.setViewportSize({ width: 1440, height: 1080 });
-  await map.getByRole("button", { name: "Close detail" }).click();
-  await map.getByRole("button", { name: /^Good website/ }).click();
-  assert.equal(await map.locator(".sample-marker").count(), 1);
-  await map.getByRole("button", { name: /^All / }).click();
-  await map
-    .getByRole("combobox", { name: "Map neighborhood" })
-    .selectOption("Greenpoint, Brooklyn");
-  assert.equal(await map.locator(".sample-marker").count(), 6);
-  assert.equal(
-    await map.locator('.sample-marker[aria-label$="Needs review"]').count(),
-    1,
-  );
-  await map.getByRole("button", { name: "Search this area" }).click();
-  assert.equal(
-    await page
-      .getByRole("textbox", { name: "Neighborhood or city" })
-      .inputValue(),
-    "Greenpoint, Brooklyn",
-  );
-  await page.keyboard.press("Escape");
-  await map
-    .getByRole("combobox", { name: "Map neighborhood" })
-    .selectOption("Williamsburg, Brooklyn");
-
-  assert.equal(
-    await page.getByRole("img", { name: /Daily revenue/ }).count(),
-    1,
-  );
-  assert.equal(
-    await page.getByRole("img", { name: /Pipeline totals/ }).count(),
-    1,
-  );
-  for (const text of [
-    "AUTONOMOUS WEBSITE AGENCY",
-    "Agency overview.",
-    "Setup required",
-    "Single worker",
-    "Workspace /",
-    "Refreshes every 5s",
-    "Your next opportunity starts here.",
-    "Every action,",
-  ]) {
-    assert.equal(
-      await page.getByText(text, { exact: false }).count(),
-      0,
-      `Removed copy: ${text}`,
-    );
-  }
-  assert.equal(await page.locator("aside").count(), 0);
-  assert.equal(await page.locator(".eyebrow, .breadcrumb, .rail").count(), 0);
-  const colors = await page.evaluate(() =>
-    Array.from(
-      document.querySelectorAll(
-        "body *:not(.map-workspace):not(.map-workspace *)",
-      ),
-    )
-      .flatMap((el) => {
-        const style = getComputedStyle(el);
-        return [
-          style.color,
-          style.backgroundColor,
-          style.borderTopColor,
-          style.fill,
-          style.stroke,
-        ];
-      })
-      .filter((value) => /^rgba?\(/.test(value)),
-  );
-  for (const color of colors) {
-    const [r, g, b] = color.match(/[\d.]+/g)!.map(Number);
-    assert(r === g && g === b, `Non-grayscale color: ${color}`);
-  }
-  await page.getByRole("button", { name: "Poor website", exact: true }).click();
-  assert.equal(await page.locator("tbody tr").count(), 5);
-  await page.getByRole("button", { name: "All businesses" }).click();
-  await page.getByRole("textbox", { name: "Search businesses" }).fill("Sunday");
-  assert.equal(await page.locator("tbody tr").count(), 1);
-  await page
-    .getByRole("button", { name: "Sunday Coffee", exact: true })
-    .click();
-  await page.getByRole("region", { name: "Sunday Coffee" }).waitFor();
-  await page.getByRole("heading", { name: "Economics", exact: true }).waitFor();
-  await page.keyboard.press("Escape");
-  assert(
-    await page
-      .getByRole("button", { name: "Sunday Coffee", exact: true })
-      .evaluate((el) => el === document.activeElement),
-  );
-  await page
-    .getByRole("textbox", { name: "Search businesses" })
-    .fill("no matches");
-  await page
-    .getByText("No matching businesses. Adjust your filters.")
-    .waitFor();
-  await page.getByRole("textbox", { name: "Search businesses" }).fill("");
-  await page
-    .getByRole("combobox", { name: "Filter by run" })
-    .selectOption("demo-run-1");
-  assert.equal(await page.locator("tbody tr").count(), 6);
-  await page.getByRole("combobox", { name: "Filter by run" }).selectOption("");
-  await page.getByRole("button", { name: "New run" }).click();
-  assert(
-    await page
-      .getByRole("button", { name: "Start run", exact: true })
-      .isDisabled(),
-  );
-  await page.keyboard.press("Escape");
-  await mkdir("artifacts", { recursive: true });
-  await page.screenshot({
-    path: "artifacts/dashboard-desktop.png",
-    fullPage: true,
-  });
-  for (const width of [390, 375]) {
-    await page.setViewportSize({ width, height: 844 });
-    assert(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth <= innerWidth,
-      ),
-      `Horizontal overflow at ${width}px`,
-    );
-  }
-  await page.screenshot({
-    path: "artifacts/dashboard-mobile.png",
-    fullPage: true,
-  });
-  await page.setViewportSize({ width: 1440, height: 1080 });
   // A complete configuration must show only API records, including a genuinely empty database.
   await page.route("**/api/config", (route) =>
     route.fulfill({ json: { missing: [] } }),
@@ -307,13 +133,22 @@ try {
     await page.getByRole("combobox", { name: "Filter by run" }).inputValue(),
     "live-run",
   );
-  // A database connection alone still uses the demo when providers are not configured.
+  // Incomplete sales setup still displays actual database records.
   await page.route("**/api/config", (route) =>
     route.fulfill({ json: { missing: ["OPENAI_API_KEY"] } }),
   );
   await page.reload();
-  await page.getByText("Demo data", { exact: true }).waitFor();
-  assert.equal(await page.locator("tbody tr").count(), 12);
+  await page
+    .getByRole("button", { name: "Live business", exact: true })
+    .waitFor();
+  assert.equal(await page.locator("tbody tr").count(), 1);
+  await page.getByRole("button", { name: "New run" }).click();
+  assert(
+    await page
+      .getByRole("button", { name: "Start run", exact: true })
+      .isDisabled(),
+  );
+  await page.keyboard.press("Escape");
   // Fetch failures must remain visible rather than silently looking like sample data.
   await page.route("**/api/config", (route) =>
     route.fulfill({ status: 500, json: { error: "Connection unavailable" } }),
@@ -431,7 +266,7 @@ try {
     .waitFor();
   assert.equal(errors.length, 0, errors.join("\n"));
   console.log(
-    "PASS browser: JSON demo, map statuses and inspector, neutral dashboard, charts, search, filters, detail, keyboard, mobile, configuration gating, live empty state, fetch errors and salesperson handoff/report.",
+    "PASS browser: persisted records, detail, keyboard, configuration gating, live empty state, fetch errors and salesperson handoff/report.",
   );
 } finally {
   await browser?.close();

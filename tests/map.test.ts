@@ -1,28 +1,19 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
-import demo from "../data/dashboard-demo.json";
 import {
   areaBusinesses,
   DEFAULT_AREA,
   latestAudit,
-  samplePosition,
   websiteStatus,
   websiteStatuses,
 } from "../lib/map";
 
 describe("business map", () => {
   it("defaults to Williamsburg and scopes markers to the selected neighborhood", () => {
-    const businesses = areaBusinesses(demo.businesses, demo.runs, DEFAULT_AREA);
-    expect(businesses).toHaveLength(6);
-    expect(businesses.every((b) => b.run_id === "demo-run-1")).toBe(true);
-    expect(areaBusinesses(demo.businesses, demo.runs, "Unknown")).toEqual([]);
-    expect(areaBusinesses([], demo.runs, DEFAULT_AREA)).toEqual([]);
-    expect(
-      areaBusinesses(
-        demo.businesses.filter((b) => b.name === "Sunday Coffee"),
-        demo.runs,
-        DEFAULT_AREA,
-      ),
-    ).toHaveLength(1);
+    const runs = [{ id: "run-1", params: { area: DEFAULT_AREA } }];
+    const businesses = [{ id: "business-1", run_id: "run-1" }];
+    expect(areaBusinesses(businesses, runs, DEFAULT_AREA)).toEqual(businesses);
+    expect(areaBusinesses(businesses, runs, "Unknown")).toEqual([]);
+    expect(areaBusinesses([], runs, DEFAULT_AREA)).toEqual([]);
   });
   it("uses audit evidence and keeps unknown or unaudited businesses gray", () => {
     expect(
@@ -47,12 +38,6 @@ describe("business map", () => {
     expect(websiteStatus({ audits })).toBe("POOR_WEBSITE");
     expect(latestAudit({ audits })).toBe(audits[1]);
     expect(audits[0].classification).toBe("GOOD_WEBSITE");
-  });
-  it("never invents missing locations and validates sample coordinates", () => {
-    expect(demo.businesses.every((b) => samplePosition(b))).toBe(true);
-    expect(samplePosition({})).toBeNull();
-    expect(samplePosition({ demo_location: { lat: 100, lng: 0 } })).toBeNull();
-    expect(samplePosition({ demo_location: { lat: 40, lng: NaN } })).toBeNull();
   });
 });
 

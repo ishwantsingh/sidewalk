@@ -119,12 +119,6 @@ label {
 .topbar > button span {
   margin-left: 16px;
 }
-.demo-label {
-  font-size: 11px;
-  color: var(--muted);
-  padding-left: 18px;
-  border-left: 1px solid var(--line);
-}
 .workspace {
   max-width: 1296px;
   margin: auto;
@@ -226,18 +220,9 @@ label {
   background: #f4f3ef;
   overflow: hidden;
 }
-.map-canvas,
-.sample-map {
+.map-canvas {
   position: absolute;
   inset: 0 0 34px;
-}
-.sample-map {
-  overflow: hidden;
-}
-.sample-map svg {
-  width: 100%;
-  height: 100%;
-  display: block;
 }
 .map-connection {
   position: absolute;
@@ -364,49 +349,6 @@ label {
   outline: 2px solid #222;
   outline-offset: 3px;
 }
-.sample-marker {
-  position: absolute;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  transform: translate(-50%, -50%);
-  background: transparent;
-  border: 0;
-  padding: 6px;
-  color: var(--ink);
-  font-size: 10px;
-  z-index: 1;
-}
-.sample-marker i {
-  display: block;
-  width: 22px;
-  height: 22px;
-  border: 3px solid #fff;
-  background: var(--pin-color);
-  border-radius: 50% 50% 50% 2px;
-  transform: rotate(-45deg);
-  box-shadow: 0 2px 5px #0003;
-  transition: scale 0.15s;
-}
-.sample-marker span {
-  background: #ffffffe6;
-  border-radius: 3px;
-  padding: 3px 5px;
-  white-space: nowrap;
-}
-.sample-marker:hover:not(:disabled) {
-  background: transparent;
-}
-.sample-marker:hover i,
-.sample-marker.is-selected i {
-  scale: 1.25;
-  outline: 2px solid #222;
-  outline-offset: 2px;
-}
-.sample-marker.is-selected {
-  z-index: 2;
-}
 @media (max-width: 1000px) {
   .map-layout,
   .map-layout.has-selection {
@@ -460,9 +402,6 @@ label {
   }
   .map-inspector-empty > p {
     margin-bottom: 14px;
-  }
-  .sample-marker span {
-    font-size: 9px;
   }
   .map-footer {
     font-size: 9px;
@@ -1029,9 +968,6 @@ tbody tr:hover {
   }
   .inspector-overlay {
     padding: 0;
-  }
-  .demo-label {
-    padding-left: 12px;
   }
   .topbar {
     gap: 12px;
