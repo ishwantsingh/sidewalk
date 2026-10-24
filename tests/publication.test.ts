@@ -11,11 +11,7 @@ it("waits through unavailable and startup responses without asking for a generat
   request
     .mockRejectedValueOnce(new Error("Provider HTTP 404"))
     .mockResolvedValueOnce(new Response("Publishing…"))
-    .mockResolvedValueOnce(
-      new Response(
-        "Flower Cat — Unofficial concept, not affiliated with this business",
-      ),
-    );
+    .mockResolvedValueOnce(new Response("Flower Cat — Coffee and pastries"));
   const waiting = waitForPublication("https://site.lovable.app", "Flower Cat");
   await vi.advanceTimersByTimeAsync(10000);
   await expect(waiting).resolves.toBeUndefined();

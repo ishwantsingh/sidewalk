@@ -115,9 +115,9 @@ For each selected business:
 2. Supplies a compact, tailored brief: brand feel, layout, mobile behavior, menu/sections, verified business facts, real navigation links, no secrets/backend.
 3. Lovable generates a polished responsive site. We deliberately constrain it to a **self-contained front-end React/Vite-style codebase** so a code ZIP is a genuine usable deliverable.
 4. Agent obtains preview and deploys with `deploy_project` when the site passes checks.
-5. Site includes an obvious **“Unofficial concept, not affiliated with this business”** notice and `noindex` directive until accepted by the owner.
+5. Site uses sourced Google reviews with exact quotes and reviewer names, real business photos and readable menu images where available. Style matches the business atmosphere; navigation stays within the generated website, with no links to the existing official website.
 
-**Required pages/sections:** Hero, offerings/menu when available, about if factual, location/hours/contact, order/reservation outbound link where verified, responsive footer. Real assets/links only.
+**Required pages/sections:** Hero, offerings/menu when available, about if factual, location/hours/contact, in-page menu/contact actions and sourced Maps directions, responsive footer. Real assets/links only.
 
 ### QA gate
 
@@ -125,7 +125,7 @@ For each selected business:
 - Mobile screenshot (375–390 px) has no major horizontal overflow or clipped CTA.
 - Main menu/contact/navigation links work.
 - Business name and information match the approved brief.
-- Unofficial disclaimer and `noindex` appear.
+- Sourced testimonials, real business photos and a photo-derived digital menu appear when available; existing official-website links are absent.
 - At most two Lovable correction attempts. If still broken, mark `BUILD_FAILED` and **do not create a Whop product or recruit a salesperson**.
 
 ## 5. Real ZIP export — the actual item being sold

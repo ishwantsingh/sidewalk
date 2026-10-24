@@ -13,6 +13,7 @@ const f = vi.hoisted(() => ({
   call: vi.fn(),
   waitForBuild: vi.fn(),
   research: vi.fn(),
+  collectBusinessContent: vi.fn(),
 }));
 vi.mock("../lib/db", () => ({
   insert: f.insert,
@@ -40,6 +41,10 @@ vi.mock("../lib/research", () => ({
 }));
 vi.mock("../lib/publication", () => ({
   waitForPublication: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("../lib/business-content", () => ({
+  collectBusinessContent: f.collectBusinessContent,
+  businessContentCost: () => 0.55,
 }));
 vi.mock("../lib/audit", () => ({ inspect: f.inspect }));
 vi.mock("../lib/export", () => ({ exportSite: f.exportSite }));
@@ -85,6 +90,14 @@ beforeEach(() => {
   }))
     vi.stubEnv(key, value);
   f.reserve.mockResolvedValue({ data: true, error: null });
+  f.collectBusinessContent.mockResolvedValue({
+    collectedAt: "2026-10-24T12:00:00Z",
+    testimonials: [],
+    photos: [],
+    menuImages: [],
+    visualDirection: "Warm and inviting",
+    issues: [],
+  });
   f.rows.mockResolvedValue([]);
   f.insert.mockImplementation(async (table, values) => ({
     ...values,
@@ -157,6 +170,64 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllEnvs());
 describe("orchestrator safety gates with isolated provider adapters", () => {
+  it("collects and persists sourced content before creating the Lovable project", async () => {
+    const content = {
+      collectedAt: "2026-10-24T12:00:00Z",
+      testimonials: [
+        {
+          quote: "Lovely coffee",
+          author: "Sam",
+          rating: 5,
+          source: "https://maps.google.com/review/1",
+          authorUri: null,
+          publishedAt: null,
+        },
+      ],
+      photos: [],
+      menuImages: [],
+      visualDirection: "Warm timber",
+      issues: [],
+    };
+    f.collectBusinessContent.mockResolvedValue(content);
+    await runPipeline({ id: "run-test", params });
+    expect(f.collectBusinessContent).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "Test Venue" }),
+      "place-test",
+    );
+    const saved = f.update.mock.calls.find(
+      ([table, , values]) => table === "businesses" && values.brief?.content,
+    );
+    expect(saved?.[2].brief.content).toEqual(content);
+    const creation = f.call.mock.calls.find(
+      ([name]) => name === "create_project",
+    )!;
+    expect(creation[1].initial_message).toContain("Lovely coffee");
+    expect(creation[1].initial_message).not.toContain("noindex");
+    expect(creation[1].initial_message).not.toContain(
+      "Unofficial concept, not affiliated with this business",
+    );
+    expect(
+      f.update.mock.invocationCallOrder[f.update.mock.calls.indexOf(saved!)],
+    ).toBeLessThan(f.call.mock.invocationCallOrder[0]);
+    expect(
+      f.reserve.mock.calls.some(
+        ([, args]) => args.p_action === "BUSINESS_CONTENT",
+      ),
+    ).toBe(true);
+  });
+  it("does not pay for a Lovable build when content inspection fails", async () => {
+    f.collectBusinessContent.mockRejectedValue(
+      new Error("Photo inspection failed"),
+    );
+    await runPipeline({ id: "run-test", params });
+    expect(f.call).not.toHaveBeenCalled();
+    expect(
+      f.reserve.mock.calls.some(
+        ([, args]) => args.p_action === "LOVABLE_BUILD",
+      ),
+    ).toBe(false);
+    expect(f.exportSite).not.toHaveBeenCalled();
+  });
   it("persists the project before waiting and never audits or sells a paused build", async () => {
     f.waitForBuild.mockImplementation(async () => {
       expect(f.insert).toHaveBeenCalledWith(

@@ -14,6 +14,14 @@ const page = (paths: string[], next: string | null = null) => ({
 const content = '{"name":"website","content":"preserve this field"}\n';
 
 describe("complete Lovable source export", () => {
+  it("documents remote media without restoring removed publication requirements", () => {
+    const readme = deploymentReadme("Cafe", { dependencies: { react: "19" } });
+    expect(readme).toContain("remote public URLs");
+    expect(readme).not.toContain("noindex");
+    expect(readme).not.toContain(
+      "Unofficial concept, not affiliated with this business",
+    );
+  });
   it("follows every cursor and reads all files from the same immutable commit", async () => {
     const call = vi.fn(async (name: string, args: Record<string, unknown>) => {
       if (name === "list_files")
