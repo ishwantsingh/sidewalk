@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Row } from "../lib/dashboard";
 import {
-  areaBusinesses,
   DEFAULT_AREA,
   DEFAULT_CENTER,
   websiteStatus,
@@ -22,21 +21,13 @@ const browserKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
 export function BusinessMap({
   businesses,
-  runs,
-  area,
-  onAreaChange,
   selectedId,
   onSelect,
-  onNewRun,
   children,
 }: {
   businesses: Row[];
-  runs: Row[];
-  area: string;
-  onAreaChange: (area: string) => void;
   selectedId?: string;
   onSelect: (business: Row) => void;
-  onNewRun: () => void;
   children: ReactNode;
 }) {
   const element = useRef<HTMLDivElement>(null);
@@ -59,13 +50,7 @@ export function BusinessMap({
       pin: HTMLElement;
     }[]
   >([]);
-  const areas = [
-    ...new Set([DEFAULT_AREA, ...runs.map((r) => r.params.area), area]),
-  ];
-  const scoped = useMemo(
-    () => areaBusinesses(businesses, runs, area),
-    [businesses, runs, area],
-  );
+  const scoped = businesses;
   const visible = scoped.filter(
     (b) => status === "ALL" || websiteStatus(b) === status,
   );
@@ -104,32 +89,6 @@ export function BusinessMap({
       map.current = null;
     };
   }, []);
-
-  useEffect(() => {
-    if (!google || !map.current) return;
-    let disposed = false;
-    setError("");
-    const center =
-      area === DEFAULT_AREA
-        ? Promise.resolve(DEFAULT_CENTER)
-        : new google.Geocoder()
-            .geocode({ address: area })
-            .then((r) => r.results[0]?.geometry.location.toJSON());
-    void center
-      .then((position) => {
-        if (!disposed && position && !markers.current.length) {
-          map.current?.setCenter(position);
-          map.current?.setZoom(15);
-        }
-      })
-      .catch(() => {
-        if (!disposed)
-          setError("This neighborhood could not be located. Try another area.");
-      });
-    return () => {
-      disposed = true;
-    };
-  }, [google, area]);
 
   useEffect(() => {
     if (!google || !map.current) return;
@@ -231,23 +190,6 @@ export function BusinessMap({
 
   return (
     <section className="map-workspace" aria-label="Business discovery map">
-      <div className="map-toolbar">
-        <div>
-          <h2>Explore businesses</h2>
-          <p>Discovered businesses · latest website audits</p>
-        </div>
-        <label className="map-area">
-          <span className="sr-only">Map neighborhood</span>
-          <select value={area} onChange={(e) => onAreaChange(e.target.value)}>
-            {areas.map((a) => (
-              <option key={a}>{a}</option>
-            ))}
-          </select>
-        </label>
-        <button className="secondary" onClick={onNewRun}>
-          Search this area ↗
-        </button>
-      </div>
       <div className="map-legend" aria-label="Filter map by website status">
         <button
           aria-pressed={status === "ALL"}
@@ -277,7 +219,7 @@ export function BusinessMap({
           <div
             className="map-canvas"
             ref={element}
-            aria-label={`Google map of ${area}`}
+            aria-label={`Google map of ${DEFAULT_AREA}`}
           />
           {(!browserKey || error) && (
             <div className="map-connection" role="status">
@@ -297,7 +239,7 @@ export function BusinessMap({
             <div className="map-message">
               {scoped.length
                 ? "No businesses match these filters."
-                : "No businesses in this area yet. Search this area to start a run."}
+                : "No businesses yet. Create a Williamsburg run to begin."}
             </div>
           )}
           <div className="map-footer">
@@ -314,18 +256,12 @@ export function BusinessMap({
         </div>
         {children || (
           <div className="map-inspector-empty">
-            <span aria-hidden="true">⌖</span>
-            <h3>Select a business</h3>
-            <p>
-              Click a marker to see its website audit, contact details, and
-              progress.
-            </p>
             <div
               className="map-business-list"
               aria-label="Businesses in map area"
             >
               {visible.map((b) => (
-                <button key={b.id} onClick={() => onSelect(b)}>
+                <a key={b.id} href={`/businesses/${b.id}`}>
                   <i
                     style={{
                       background: websiteStatuses[websiteStatus(b)].color,
@@ -337,8 +273,8 @@ export function BusinessMap({
                       {b.category} · {websiteStatuses[websiteStatus(b)].label}
                     </small>
                   </span>
-                  <span aria-hidden="true">↗</span>
-                </button>
+                  <span>Show details ↗</span>
+                </a>
               ))}
             </div>
           </div>

@@ -20,10 +20,3 @@ export function websiteStatus(business: Row): WebsiteStatus {
   const latest = latestAudit(business)?.classification;
   return Object.hasOwn(websiteStatuses, latest) ? latest : "NEEDS_REVIEW";
 }
-
-export function areaBusinesses(businesses: Row[], runs: Row[], area: string) {
-  const runIds = new Set(
-    runs.filter((r) => r.params.area === area).map((r) => r.id),
-  );
-  return businesses.filter((b) => runIds.has(b.run_id));
-}
