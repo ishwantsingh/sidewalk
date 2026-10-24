@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { BusinessDetails } from "../../business-details";
+import { BusinessWorkspace } from "../../business-workspace";
 import type { Row } from "../../../lib/dashboard";
 
 export default function BusinessPage() {
@@ -41,11 +41,14 @@ export default function BusinessPage() {
   }
   return (
     <div className="app">
-      <header className="topbar">
+      <header className="topbar business-topbar">
         <a className="brand" href="/">
           sidewalk
         </a>
-        <a href="/">← All businesses</a>
+        <div className="business-topbar-title">
+          <a href="/">← All businesses</a>
+          {detail && <h1>{detail.name}</h1>}
+        </div>
       </header>
       <main className="workspace business-page">
         {error && (
@@ -55,7 +58,7 @@ export default function BusinessPage() {
         )}
         {!detail && !error && <p>Loading business…</p>}
         {detail && (
-          <BusinessDetails
+          <BusinessWorkspace
             detail={detail}
             onRetry={(orderId) => void retry(orderId)}
           />

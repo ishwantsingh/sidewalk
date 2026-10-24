@@ -256,12 +256,6 @@ export function BusinessMap({
         </div>
         {children || (
           <div className="map-inspector-empty">
-            <span aria-hidden="true">⌖</span>
-            <h3>Williamsburg businesses</h3>
-            <p>
-              Click a marker to see its website audit, contact details, and
-              progress.
-            </p>
             <div
               className="map-business-list"
               aria-label="Businesses in map area"

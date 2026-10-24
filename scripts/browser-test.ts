@@ -134,11 +134,33 @@ try {
     .waitFor();
   assert.equal(await page.locator("tbody tr").count(), 1);
   assert.equal(
+    await page
+      .locator(
+        ".map-inspector-empty > span, .map-inspector-empty > h3, .map-inspector-empty > p",
+      )
+      .count(),
+    0,
+  );
+  assert.equal(
     await page.getByText("Sunday Coffee", { exact: true }).count(),
     0,
   );
   await page.getByRole("link", { name: "Live business", exact: true }).click();
   await page.getByRole("region", { name: "Live business" }).waitFor();
+  assert.equal(await page.locator(".bw-summary").count(), 0);
+  assert.equal(await page.locator(".bw-heading, .bw-eyebrow").count(), 0);
+  await page
+    .locator(".business-topbar h1")
+    .filter({ hasText: "Live business" })
+    .waitFor();
+  assert.equal(await page.locator(".bw-tabs .bw-stage").count(), 1);
+  await page.getByRole("heading", { name: "Links & resources" }).waitFor();
+  await page.getByRole("button", { name: "Outreach", exact: true }).click();
+  await page.getByText("No sales emails yet.", { exact: true }).waitFor();
+  await page.getByRole("button", { name: /^Activity/ }).click();
+  await page.getByRole("heading", { name: "Business activity" }).waitFor();
+  await page.getByRole("button", { name: "Overview", exact: true }).click();
+  await page.getByRole("heading", { name: "Website overview" }).waitFor();
   assert.equal(new URL(page.url()).pathname, "/businesses/live-business");
   await page.getByRole("link", { name: "All businesses" }).click();
 
