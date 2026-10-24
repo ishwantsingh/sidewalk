@@ -203,6 +203,7 @@ export default function Dashboard() {
         maxEstimatedRunCostUsd: Number(f.get("maxEstimatedRunCostUsd")),
       });
       setSelectedRun(run.id);
+      setMapArea(run.params.area);
       setForm(false);
       await refresh();
     } catch (e) {

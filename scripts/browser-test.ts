@@ -78,7 +78,10 @@ try {
       assert.equal(body.maxSalesTasks, 2);
       assert.equal(body.maxRealEmails, 2);
       assert.equal(body.requireEmailAndPhone, true);
-      await route.fulfill({ status: 201, json: { id: "live-run" } });
+      await route.fulfill({
+        status: 201,
+        json: { id: "live-run", params: body },
+      });
     } else
       await route.fulfill({
         json: [
@@ -138,6 +141,10 @@ try {
   assert.equal(
     await page.getByRole("combobox", { name: "Filter by run" }).inputValue(),
     "live-run",
+  );
+  assert.equal(
+    await page.getByRole("combobox", { name: "Map neighborhood" }).inputValue(),
+    "Brooklyn",
   );
   // Incomplete sales setup still displays actual database records.
   await page.route("**/api/config", (route) =>

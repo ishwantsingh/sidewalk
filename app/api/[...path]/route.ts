@@ -15,6 +15,7 @@ import {
   SalesReviewRequired,
 } from "../../../lib/sales";
 import { Terac } from "../../../lib/terac";
+import { dashboardBusiness } from "../../../lib/dashboard";
 import { sameOrigin } from "../../../lib/origin";
 import { db, insert, one, rows, update } from "../../../lib/db";
 
@@ -203,7 +204,11 @@ async function handler(request: Request, ctx: Context) {
         .order("created_at", { ascending: false })
         .limit(300);
       if (error) throw error;
-      return response(run ? data.filter((b) => b.run_id === run) : data);
+      return response(
+        (run ? data.filter((b) => b.run_id === run) : data).map(
+          dashboardBusiness,
+        ),
+      );
     }
     if (path[0] === "businesses" && path[1] && method === "GET") {
       const id = z.uuid().parse(path[1]);

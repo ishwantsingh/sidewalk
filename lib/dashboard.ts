@@ -1,4 +1,21 @@
 export type Row = Record<string, any>;
+/** PostgREST embeds unique foreign-key relations as objects, and missing rows as null. */
+export function dashboardBusiness(business: Row): Row {
+  const list = (value: Row | Row[] | null | undefined): Row[] =>
+    value == null ? [] : Array.isArray(value) ? value : [value];
+  return {
+    ...business,
+    audits: list(business.audits),
+    opportunities: list(business.opportunities),
+    sites: list(business.sites).map((site) => ({
+      ...site,
+      products: list(site.products),
+    })),
+    emails: list(business.emails),
+    sales_tasks: list(business.sales_tasks),
+    events: list(business.events),
+  };
+}
 export function summarize(businesses: Row[], orders: Row[], events: Row[]) {
   const qualified = businesses.filter(
     (b) =>

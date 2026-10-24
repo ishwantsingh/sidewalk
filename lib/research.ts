@@ -3,23 +3,30 @@ import { z } from "zod";
 import { zodResponseFormat } from "openai/helpers/zod";
 import { env } from "./config";
 import { json, request } from "./http";
+// OpenAI structured output does not support the JSON Schema `uri` format.
+// Keep URL validation local without emitting that format in the wire schema.
+const sourceUrl = z
+  .string()
+  .refine((value) => z.url().safeParse(value).success, {
+    message: "Invalid source URL",
+  });
 const fact = z.object({
   label: z.string(),
   value: z.string(),
-  source: z.string().url(),
+  source: sourceUrl,
   confidence: z.enum(["high", "medium"]),
 });
 export const briefSchema = z.object({
   name: z.string(),
   category: z.string(),
-  officialWebsite: z.url().nullable(),
+  officialWebsite: sourceUrl.nullable(),
   websiteAbsent: z.boolean(),
   ambiguous: z.boolean(),
   chain: z.boolean(),
   contactEmail: z.string().nullable(),
-  contactSource: z.url().nullable(),
+  contactSource: sourceUrl.nullable(),
   contactPhone: z.string().nullable(),
-  phoneSource: z.url().nullable(),
+  phoneSource: sourceUrl.nullable(),
   facts: z.array(fact),
   direction: z.string(),
 });

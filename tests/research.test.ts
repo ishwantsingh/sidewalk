@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
-import { phoneAppearsInSource } from "../lib/research";
+import { zodResponseFormat } from "openai/helpers/zod";
+import { briefSchema, phoneAppearsInSource } from "../lib/research";
 it("retains phone numbers only when a real phone span appears in the cited text", () => {
   expect(
     phoneAppearsInSource(
@@ -20,4 +21,15 @@ it("retains phone numbers only when a real phone span appears in the cited text"
     false,
   );
   expect(phoneAppearsInSource("212", "212")).toBe(false);
+});
+
+it("emits an OpenAI-compatible schema while validating source URLs locally", () => {
+  const response = zodResponseFormat(briefSchema, "brief");
+  expect(JSON.stringify(response)).not.toContain('"format":"uri"');
+  expect(briefSchema.shape.officialWebsite.safeParse("not a URL").success).toBe(
+    false,
+  );
+  expect(
+    briefSchema.shape.officialWebsite.safeParse("https://example.com").success,
+  ).toBe(true);
 });
