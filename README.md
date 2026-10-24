@@ -91,7 +91,9 @@ Set `INTERNAL_BUYER_EMAILS` before an internal verification purchase. Such purch
 
 ## Deploy
 
-The smallest deployment is one Node 22 VPS running the web process and **one worker process**, with managed Supabase. Install Docker and Chromium's OS dependencies (`npx playwright install --with-deps chromium`), run `npm ci && npm run build`, then supervise `npm start` and `npm run worker` with systemd or your process manager. Keep `.env.local` readable only by the app user. Configure the reverse proxy for HTTPS, point `APP_URL` at that origin, and run `npm run doctor` on the worker host.
+For the hackathon, use **Netlify Free for the UI/API and this Mac for the worker**. [`netlify.toml`](netlify.toml) runs the checks and production build on Node 22; Netlify supplies its Next.js adapter. Follow [`docs/deployment.md`](docs/deployment.md) for the branch selection, environment import, Whop webhook, public Maps key, read-only deployment check and sleep-safe local worker command. Both processes use the same Supabase project; no tunnel is required. Run `npm run verify:deployment -- https://YOUR_SITE.netlify.app` after deploying.
+
+A single-host alternative is one Node 22 VPS running the web process and **one worker process**, with managed Supabase. Install Docker and Chromium's OS dependencies (`npx playwright install --with-deps chromium`), run `npm ci && npm run build`, then supervise `npm start` and `npm run worker` with systemd or your process manager. Keep `.env.local` readable only by the app user. Configure the reverse proxy for HTTPS, point `APP_URL` at that origin, and run `npm run doctor` on the worker host.
 
 The web app can also run on a Node-compatible Next.js host while the worker stays on the VPS. Both must use the same environment secrets and Supabase project. The worker is persistent; do not put it in a short-lived serverless handler. Do not run generated npm commands directly in the application process.
 

@@ -1,0 +1,12 @@
+# Next.js UI + API only. The persistent Docker/Chromium worker runs on the Mac.
+[build]
+  command = "npm run check"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "22"
+  # This restricted browser key is intentionally embedded in the Maps UI.
+  SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_GOOGLE_MAPS_API_KEY"
+
+# Netlify automatically installs its Next.js adapter. No SPA redirect or static export.
+# Set application environment variables in Netlify's UI, not in this file.
