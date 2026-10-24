@@ -1,5 +1,7 @@
 import { publicAddress, webUrl } from "./network";
-import { Agent } from "undici";
+import { Agent, fetch as undiciFetch } from "undici";
+// A dispatcher must use the fetch implementation from the same Undici version.
+const pinnedFetch = undiciFetch as unknown as typeof globalThis.fetch;
 import type { LookupFunction } from "node:net";
 const safeAgent = new Agent({
   connect: {
@@ -27,7 +29,7 @@ export async function request(
   for (let redirect = 0; redirect < 6; redirect++) {
     if (safe) await publicUrl(target);
     for (let attempt = 0; attempt < 3; attempt++) {
-      const r = await fetch(target, {
+      const r = await (safe ? pinnedFetch : fetch)(target, {
         ...init,
         ...(safe ? { dispatcher: safeAgent } : {}),
         redirect: safe ? "manual" : "follow",

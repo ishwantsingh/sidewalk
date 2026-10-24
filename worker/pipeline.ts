@@ -23,7 +23,10 @@ async function reserve(
   if (error) throw error;
   if (!data) throw new Error("Estimated run spending cap reached");
 }
-export async function runPipeline(run: { id: string; params: RunInput }) {
+export async function runPipeline(
+  run: { id: string; params: RunInput },
+  { retryPreBuild = false } = {},
+) {
   const { id, params: p } = run;
   await reserve(id, null, "DISCOVERY", cost("COST_PLACES_SEARCH_USD"));
   const places = await discover(
@@ -46,7 +49,8 @@ export async function runPipeline(run: { id: string; params: RunInput }) {
   }[] = [];
   for (const place of places.slice(0, p.maxBusinesses)) {
     const existing = await rows("businesses", "place_id", place.id);
-    if (existing.length) {
+    const retry = retryPreBuild && existing[0]?.run_id === id;
+    if (existing.length && !retry) {
       await event(
         id,
         null,
@@ -55,8 +59,12 @@ export async function runPipeline(run: { id: string; params: RunInput }) {
       );
       continue;
     }
-    let business: Record<string, any> | undefined;
+    let business: Record<string, any> | undefined = retry
+      ? existing[0]
+      : undefined;
     try {
+      if (retry && (await rows("sites", "business_id", business!.id)).length)
+        throw new Error("Cannot retry a business after site creation");
       await reserve(
         id,
         null,
@@ -82,8 +90,8 @@ export async function runPipeline(run: { id: string; params: RunInput }) {
       )?.value;
       const identity = identityKey(brief.name, location, brief.officialWebsite);
       const duplicate = await rows("businesses", "identity_key", identity);
-      if (duplicate.length) continue;
-      business = await insert("businesses", {
+      if (duplicate.some((row) => row.id !== business?.id)) continue;
+      const businessValues = {
         run_id: id,
         place_id: place.id,
         identity_key: identity,
@@ -97,7 +105,13 @@ export async function runPipeline(run: { id: string; params: RunInput }) {
         source_urls: [...new Set(brief.facts.map((f) => f.source))],
         brief,
         state: "DISCOVERED",
-      });
+        failure_stage: null,
+        failure_reason: null,
+      };
+      if (business) {
+        await update("businesses", business.id, businessValues);
+        business = { ...business, ...businessValues };
+      } else business = await insert("businesses", businessValues);
       if (!business) throw new Error("Business was not persisted");
       let audit: Record<string, any> = {
         score: null,
@@ -132,7 +146,11 @@ export async function runPipeline(run: { id: string; params: RunInput }) {
           [],
           brief.websiteAbsent && !brief.ambiguous,
         );
-      await insert("audits", { business_id: business.id, ...audit });
+      const previousAudit = retry
+        ? (await rows("audits", "business_id", business.id))[0]
+        : null;
+      if (previousAudit) await update("audits", previousAudit.id, audit);
+      else await insert("audits", { business_id: business.id, ...audit });
       await update("businesses", business.id, { state: "AUDITED" });
       const economicsData = economics(
         audit.score,
@@ -150,10 +168,16 @@ export async function runPipeline(run: { id: string; params: RunInput }) {
           ? cost("TERAC_MAX_TASK_COST_USD")
           : 0,
       );
-      await insert("opportunities", {
-        business_id: business.id,
-        ...economicsData,
-      });
+      const previousOpportunity = retry
+        ? (await rows("opportunities", "business_id", business.id))[0]
+        : null;
+      if (previousOpportunity)
+        await update("opportunities", previousOpportunity.id, economicsData);
+      else
+        await insert("opportunities", {
+          business_id: business.id,
+          ...economicsData,
+        });
       const meetsContactRequirement =
         !p.requireEmailAndPhone ||
         !!(

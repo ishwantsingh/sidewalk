@@ -386,3 +386,49 @@ describe("orchestrator safety gates with isolated provider adapters", () => {
     expect(f.call).not.toHaveBeenCalled();
   });
 });
+
+it("retries research and audits in place without duplicating the business", async () => {
+  const prior = {
+    id: "existing",
+    run_id: "run-test",
+    name: "Test Venue",
+    state: "REJECTED",
+  };
+  f.rows.mockImplementation(async (table, column) => {
+    if (table === "businesses") return [prior];
+    if (table === "audits") return [{ id: "audit-existing" }];
+    if (table === "opportunities") return [{ id: "opportunity-existing" }];
+    return [];
+  });
+  await runPipeline({ id: "run-test", params }, { retryPreBuild: true });
+  expect(
+    f.insert.mock.calls.filter(([table]) =>
+      ["businesses", "audits", "opportunities"].includes(table),
+    ),
+  ).toHaveLength(0);
+  expect(f.update).toHaveBeenCalledWith(
+    "audits",
+    "audit-existing",
+    expect.objectContaining({ classification: "NO_WEBSITE" }),
+  );
+  expect(f.sendOutreach).toHaveBeenCalledOnce();
+});
+it("never replays an existing site during a prebuild retry", async () => {
+  f.rows.mockImplementation(async (table) =>
+    table === "businesses"
+      ? [{ id: "existing", run_id: "run-test" }]
+      : table === "sites"
+        ? [{ id: "site-existing" }]
+        : [],
+  );
+  await runPipeline({ id: "run-test", params }, { retryPreBuild: true });
+  expect(f.research).not.toHaveBeenCalled();
+  expect(f.call).not.toHaveBeenCalled();
+  expect(f.sendOutreach).not.toHaveBeenCalled();
+  expect(f.event).toHaveBeenCalledWith(
+    "run-test",
+    "existing",
+    "FAILED",
+    "Cannot retry a business after site creation",
+  );
+});
