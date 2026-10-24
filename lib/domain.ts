@@ -23,6 +23,7 @@ export function economics(
   researchCost: number,
   feePercent: number,
   feeFixed: number,
+  salesCost = 0,
 ) {
   const opportunity =
     classification === "NO_WEBSITE" ? 100 : score === null ? 0 : 100 - score;
@@ -39,12 +40,14 @@ export function economics(
   const expected =
     probability * (price - (price * feePercent) / 100 - feeFixed) -
     buildCost -
-    researchCost;
+    researchCost -
+    salesCost;
   return {
     website_opportunity: opportunity,
     quoted_price: price,
     estimated_build_cost: buildCost,
     research_cost: researchCost,
+    estimated_sales_cost: salesCost,
     purchase_probability: probability,
     expected_contribution: expected,
     priority: hasContact ? opportunity * 0.6 + completeness * 20 + expected : 0,

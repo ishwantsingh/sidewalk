@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { Webhook } from "standardwebhooks";
 import { unwrapWebhook } from "@whop/sdk/helpers";
 import { sameOrigin } from "../lib/origin";
-import { signature, verifySignature } from "../lib/mail";
+import { salesSignature, validSalesSignature } from "../lib/sales-access";
 import { publicUrl } from "../lib/http";
 import { GET, POST } from "../app/api/[...path]/route";
 const context = (...path: string[]) => ({ params: Promise.resolve({ path }) });
@@ -44,12 +44,12 @@ describe("dashboard access", () => {
   });
 });
 describe("buyer security", () => {
-  it("binds opt-outs to a signed email identifier", () => {
+  it("binds private sales briefs to their assignment", () => {
     vi.stubEnv("DOWNLOAD_SIGNING_SECRET", "test-signing-secret");
-    const sig = signature("optout:123");
-    expect(verifySignature("optout:123", sig)).toBe(true);
-    expect(verifySignature("optout:124", sig)).toBe(false);
-    expect(verifySignature("optout:123", "")).toBe(false);
+    const sig = salesSignature("123");
+    expect(validSalesSignature("123", sig)).toBe(true);
+    expect(validSalesSignature("124", sig)).toBe(false);
+    expect(validSalesSignature("123", "")).toBe(false);
   });
   it("verifies the exact Whop webhook bytes, rejecting tampering", () => {
     const secret = "ws_unit-test-webhook-secret-32bytes";

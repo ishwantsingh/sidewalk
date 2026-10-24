@@ -1,8 +1,8 @@
 # Sidewalk AI — Hackathon Build Spec
 
-**Version:** 2.0 — hackathon-only scope  
+**Version:** 3.0 — hackathon-only scope
 **Working name:** Sidewalk AI  
-**Goal:** Build an autonomous website agency that really discovers local businesses, evaluates website opportunities, builds a better site, lists that specific website as a product on Whop, emails a real business contact, accepts payment through Whop, and automatically delivers the website source as a `.zip`.
+**Goal:** Build an autonomous website agency that really discovers local businesses, evaluates website opportunities, builds a better site, lists that specific website as a product on Whop, sends a sales email and recruits a Terac salesperson to call a real business contact, accepts payment through Whop, and automatically delivers the website source as a `.zip`.
 
 > **Pitch:** “An AI web agency with zero employees. It finds businesses that need websites, builds them a working one, lists each site for sale, and automatically delivers the code when they buy.”
 
@@ -17,14 +17,16 @@ flowchart TD
   C --> D["Research + build with Lovable"]
   D --> E["QA + publish preview + export ZIP"]
   E --> F["Create individual Whop product"]
-  F --> G["Email preview and product link"]
+  F --> M["Send automated sales email"]
+  F --> G["Terac salesperson calls owner with email context and Whop link"]
+  M --> H
   G --> H["Whop payment"]
   H --> I["Automatically deliver ZIP"]
 ```
 
-**Every box is a real integration/action.** No generated leads, fake website screenshots, placeholder Whop pages, simulated sent-email events, or dummy fulfillment successes.
+**Every box is a real integration/action.** No generated leads, fake website screenshots, placeholder Whop pages, simulated sales calls, or dummy fulfillment successes.
 
-**Explicitly excluded:** Stripe integration; domain connection or transfer; buyer account creation; client portal; subscriptions and maintenance; follow-up campaigns; voice calling; custom site editor; ownership verification workflow; post-hackathon roadmap. We are **selling a downloadable website codebase**, not promising to operate its future hosting.
+**Explicitly excluded:** Stripe integration; domain connection or transfer; buyer account creation; client portal; subscriptions and maintenance; follow-up campaigns; automated AI voice calling; custom site editor; ownership verification workflow; post-hackathon roadmap. We are **selling a downloadable website codebase**, not promising to operate its future hosting.
 
 ## 2. Main user flow
 
@@ -35,11 +37,11 @@ flowchart TD
 3. Watch real businesses populate the dashboard with status: `No website`, `Poor website`, `Good website`, or `Needs review`.
 4. See website scores, evidence, rank, estimated sale price, build cost, and expected-profit estimate.
 5. Watch the agent choose qualified businesses and build their sites through Lovable.
-6. Inspect actual new preview URLs, Whop product pages, sent-email status, sales and ZIP-delivery status.
+6. Inspect actual new preview URLs, Whop product pages, Terac sales-task status, sales and ZIP-delivery status.
 
 ### Business recipient
 
-1. Gets an email describing an **unofficial website concept** created for their business.
+1. Receives a sales email and a human sales call describing an **unofficial website concept** created for their business.
 2. Clicks the preview link and sees the functioning, fully designed site.
 3. Clicks the **specific Whop product page** for that exact website.
 4. Completes one-time payment directly through **Whop**.
@@ -51,7 +53,7 @@ flowchart TD
 ### Discovery
 
 - **Google Places API (New):** Search by area/radius and types (`cafe`, `restaurant`, `bakery`, etc.). Retrieve unique place ID, name, business type, operating status, and website URL as needed. Use narrow field masks to control cost.
-- **Exa Search + Contents:** Independently search for an official website, publicly posted menu, and a business-controlled contact email.
+- **Exa Search + Contents:** Independently search for an official website, publicly posted menu, and a business-controlled public phone and email.
 - **Website existence check:** `websiteUri` missing from Google is only a clue. Exa may find a real website that Google omitted.
 - **Deduplication:** Unique place ID first, fallback normalized business name/address/URL. Ignore closed businesses, chains where inappropriate, and duplicates.
 
@@ -86,11 +88,11 @@ Show four values for every candidate:
 - **Website opportunity:** `100 - websiteScore` for audited sites; `100` for confirmed no-site businesses.
 - **Quoted sale price:** Simple configurable pricing, e.g. `$199` base, optionally `$299` for more complex menus. Prices are hypotheses, not market-validated facts.
 - **Estimated production cost:** Exa + Places + model + Lovable costs attributable to that lead. Record real costs when available; clearly label any estimate.
-- **Expected contribution:** `estimatedPurchaseProbability × (price - paymentFee) - expectedBuildCost - researchCost`.
+- **Expected contribution:** `estimatedPurchaseProbability × (price - paymentFee) - expectedBuildCost - researchCost - salesAllowance`.
 
 Purchase probability is an **explicit heuristic** (e.g. based on website gap, contact availability and content completeness), not a predictive model trained on customer outcomes. Never claim precision that does not exist.
 
-**Lead priority** favors a severe website gap, enough public information to build accurately, a publicly available lawful email address, and a good estimated return after cost. Generate only the top `2–3` leads per run. Businesses without a usable contact email may still be listed and scored, but are excluded from the automated sales cycle.
+**Lead priority** favors a severe website gap, enough public information to build accurately, a sourced public business email or phone, and a good estimated return after cost. Generate only the top `2–3` leads per run. Businesses without either sourced contact channel are excluded from the sales cycle. Email-only businesses remain eligible for sales email; phone-only businesses remain eligible for a call.
 
 ## 4. Website research and build
 
@@ -124,7 +126,7 @@ For each selected business:
 - Main menu/contact/navigation links work.
 - Business name and information match the approved brief.
 - Unofficial disclaimer and `noindex` appear.
-- At most two Lovable correction attempts. If still broken, mark `BUILD_FAILED` and **do not create a Whop product or send an email**.
+- At most two Lovable correction attempts. If still broken, mark `BUILD_FAILED` and **do not create a Whop product or recruit a salesperson**.
 
 ## 5. Real ZIP export — the actual item being sold
 
@@ -167,39 +169,27 @@ Example:
 4. Open the actual storefront **product page**, verify name, price and image are visible, and verify it leads to its Whop checkout.
 5. Add `leadId`/`siteId` identifiers as product/plan metadata where permitted so the payment webhook can identify the correct ZIP.
 
-**Important:** The outbound sales email links to the **exact Whop product page** for that restaurant's website (not a generic store home page). The system also stores its Whop checkout URL for internal validation. Never email a product link until it has been tested as reachable.
+**Important:** The salesperson receives the exact Whop product page and checkout URL for this business's website. Both are validated before recruitment.
 
-## 7. Real email outreach
+## 7. Terac salesperson integration
 
 ### Contact discovery
 
-Use Exa and business-owned public pages to find a legitimate business contact address. Source URL and confidence are logged. **Do not guess owner email addresses.** If no permitted business email exists, mark `NO_CONTACT` and skip sending for that lead.
+Use Exa and business-controlled public pages to find a public business phone number. Log its source URL; never guess a number or use private personal contacts. A business without either sourced phone or email is `NO_CONTACT`. Each channel operates when its own sourced contact is available.
 
-### Email delivery
+### Automated email plus one sales assignment per finished website
 
-Use a verified business sender through an email API such as Resend. The agent personalizes the message with the actual venue name, one genuine issue or improvement, actual preview URL and its exact Whop product page URL.
+After site QA, ZIP export and Whop verification:
 
-```text
-Subject: We made a website concept for [Business Name]
+1. Attempt the existing automated sales email, with a verified sender, physical address, signed opt-out link, live preview and exact Whop product URL. Store the exact subject/body and provider status. Independently reserve the configured `TERAC_MAX_TASK_COST_USD` allowance against the run budget.
+2. Connect the Terac MCP, get organization context, and create one screened salesperson opportunity as a free draft.
+3. Read the all-in quote and funding status. Launch only if the quote fits the reserved allowance.
+4. Provide a signed task-page link containing the sourced business context, phone, site preview, exact Whop store/checkout links, one-time price, delivery terms, and the exact email already attempted. Show recipient, subject, body, provider acceptance time or an explicit failed/not-sent state so the caller knows what the owner may have received.
+5. The salesperson reviews the offer, makes one real call during local business hours, directs the owner to Whop, and submits an outcome and notes. The caller is compensated for genuine work, not a guaranteed purchase.
+6. Validate the caller's Terac submission belongs to the opportunity. Record do-not-call requests as persistent phone suppression. After the caller marks the task complete in Terac, approve the matching submitted report.
+7. Display recruitment, report and error states separately from payment. A caller's purchase claim never creates an order or counts as revenue.
 
-Hi [Business Name] team,
-
-We noticed [a truthful, specific website gap], so we created an
-unofficial website concept for your business.
-
-Preview the finished site: [REAL_PREVIEW_URL]
-Buy the website source files: [REAL_WHOP_PRODUCT_PAGE_URL]
-
-The website is already built. If you purchase it on Whop, you'll
-automatically receive a ZIP with the code and setup instructions.
-
-This is a commercial offer from Sidewalk AI, not a message sent by
-or on behalf of your business.
-
-[Sender name, valid physical postal address, opt-out instructions]
-```
-
-**Send conditions:** Verified sender domain, correct real address, valid opt-out, compliant content, published/QA-passed preview, existing purchasable Whop product, and an email send limit (e.g. maximum `3` real emails in a run). FTC CAN-SPAM applies to B2B commercial messages. Emails are **actually sent** via provider API, and provider delivery IDs/statuses are recorded. If requirements fail, do not claim `SENT`.
+Use one human handoff. Lovable builds the design directly; there is no human designer or second human review. Email attempts and sales assignments have independent caps and failures. Sales polling runs independently of generation and fulfillment. Unknown creation/launch/approval outcomes require reconciliation instead of replaying billable operations. Actual caller availability and completion time must be verified with Terac; no instant-call guarantee is inferred from launching recruitment.
 
 ## 8. Whop payment and automatic ZIP fulfillment
 
@@ -224,16 +214,17 @@ No manual download handoff. No fake payments. A team-controlled genuine low-valu
 |---|---|---|
 | Dashboard/API | Next.js + TypeScript | Run setup, pipeline UI, lead/site/product status, webhook route |
 | Workflow worker | One persistent Node/TypeScript worker | Sequential external calls, Lovable MCP session, retries |
-| Database | Postgres (Supabase) | Leads, scores, runs, sites, products, emails, orders |
+| Database | Postgres (Supabase) | Leads, scores, runs, sites, products, sales tasks, orders |
 | Private ZIP storage | Supabase Storage private bucket | Store and sign download URLs |
 | Prospecting | Google Places API | Nearby business discovery |
 | Research | Exa | Official website/menu/contact discovery |
 | Audit | Playwright + Lighthouse | Website testing/screenshots |
 | Site builder | Lovable MCP | Create, modify, deploy and inspect code |
 | Commerce | Whop API + webhook | Product pages, one-time price, payment confirmation |
-| Email | Resend or equivalent | Real prospect emails and paid-delivery emails |
+| Sales | Terac MCP | Recruit a salesperson, hand off the offer, collect and approve a call report |
+| Email | Resend or equivalent | Sales offer emails and paid-delivery emails |
 
-Use a **single orchestrator** plus typed steps; do not build a complicated multi-agent society. The LLM decides which leads are attractive, prepares content, and directs Lovable. Ordinary code handles scoring arithmetic, source checks, cost limits, product creation, emails, payment verification, and file delivery.
+Use a **single orchestrator** plus typed steps; do not build a complicated multi-agent society. The LLM decides which leads are attractive, prepares content, and directs Lovable. Ordinary code handles scoring arithmetic, source checks, cost limits, product creation, sales recruitment, payment verification, and file delivery.
 
 ### State machine
 
@@ -245,7 +236,7 @@ DISCOVERED
   → PREVIEW_READY
   → ZIP_READY
   → WHOP_LISTED
-  → EMAIL_SENT | NO_CONTACT
+  → SALES_QUEUED | NO_CONTACT
   → PAID
   → ZIP_DELIVERED
 
@@ -256,13 +247,15 @@ Any failure → FAILED(stage, reason) without pretending later steps succeeded.
 
 | Table | Important fields |
 |---|---|
-| `runs` | `id`, geographic input, lead/build/send limits, spend cap, status |
-| `businesses` | `id`, permitted place identifier, display identity, source URLs, website URL, email and provenance, state |
+| `runs` | `id`, geographic input, lead/build/sales-task limits, spend cap, status |
+| `businesses` | `id`, permitted place identifier, display identity, source URLs, website URL, phone/email and provenance, state |
 | `audits` | `business_id`, score, measurements, screenshot URL, explanation, classification |
 | `opportunities` | `business_id`, quoted price, estimated build cost, heuristic conversion probability, priority |
 | `sites` | `business_id`, Lovable project ID, preview URL, ZIP private path/checksum, QA status |
 | `products` | `site_id`, Whop product ID, plan ID, storefront URL, purchase URL, amount |
-| `emails` | `business_id`, address, provider message ID, status, sent timestamp, opt-out status |
+| `emails` | Business ID, recipient, exact subject/body, send status, provider acknowledgement, opt-out |
+| `sales_tasks` | Business/run IDs, brief, Terac opportunity ID, status, reserved/quoted costs, call report, errors |
+| `sales_suppressions` | Normalized do-not-call phone number |
 | `orders` | Whop payment/event ID, product ID, buyer contact, amount, paid timestamp, ZIP delivery state |
 | `events` | Run ID, business ID, timestamp, action, outcome, cost/estimate, reason |
 
@@ -277,21 +270,22 @@ GET  /api/businesses           Lead list, scores, economics, pipeline state
 GET  /api/businesses/:id       Audit + before/after + site + Whop URLs
 POST /api/webhooks/whop        Verified payment webhook, triggers delivery
 GET  /api/download/:token      Signed buyer-authorized ZIP download
+GET/POST /api/sales/:id         Signed salesperson brief and call report
 ```
 
 ## 10. Dashboard requirements
 
 The interface is the main hackathon presentation. Show live, persisted facts, not scripted visuals:
 
-**Top summary:** Businesses found, missing sites, bad sites, qualified leads, websites built, Whop products created, actual emails sent, payments, delivered ZIPs, actual revenue, estimated spending.
+**Top summary:** Businesses found, missing sites, bad sites, qualified leads, websites built, Whop products created, sales emails, Terac sales assignments and reported calls, payments, delivered ZIPs, actual revenue, estimated spending.
 
 **Lead table:** Business name, category, website status, score, opportunity rank, sale price, build cost, expected value, stage, latest action.
 
-**Lead detail:** Original site screenshot (if any), reason for low score, site preview/screenshot, Whop product link, ZIP build check, recipient/send status, payment and delivery status.
+**Lead detail:** Original site screenshot (if any), reason for low score, site preview/screenshot, Whop product link, ZIP build check, salesperson task/report status, payment and delivery status.
 
-**Company activity feed:** Timestamped real actions with reasoning and costs, e.g. `14:12 audited`, `14:18 Lovable project created`, `14:25 Whop product listed`, `14:26 email sent`, `15:03 payment confirmed`, `15:03 ZIP link delivered`.
+**Company activity feed:** Timestamped real actions with reasoning and costs, e.g. `14:12 audited`, `14:18 Lovable project created`, `14:25 Whop product listed`, `14:26 sales assignment launched`, `15:03 payment confirmed`, `15:03 ZIP link delivered`.
 
-Include visible safeguards: max spend, max site generations, max outbound emails. Never label a draft as an email sent or a preview as an owner-approved official website.
+Include visible safeguards: max spend, max site generations, max sales assignments. Never label a recruitment task as a completed call or a preview as an owner-approved official website.
 
 ## 11. Run parameters, caps and failure handling
 
@@ -306,8 +300,9 @@ Suggested initial parameters:
   "siteScoreThreshold": 45,
   "maxSitesToBuild": 3,
   "maxRealEmails": 3,
+  "maxSalesTasks": 3,
   "maxLovableRepairAttempts": 2,
-  "maxEstimatedRunCostUsd": 25
+  "maxEstimatedRunCostUsd": 100
 }
 ```
 
@@ -315,9 +310,9 @@ Suggested initial parameters:
 - Retry safe reads. Use idempotency keys for creating products, sending email, and fulfilling orders.
 - If a generated site is broken, the workflow stops for that lead before product creation.
 - If code export/build fails, no Whop listing is created.
-- If Whop product page/checkout URL fails validation, no email is sent.
-- If no lawful email is available, keep the real prospect in the dashboard as `NO_CONTACT` instead of inventing data.
-- If email send fails, record `EMAIL_FAILED`, not `EMAIL_SENT`.
+- If Whop product page/checkout URL fails validation, no salesperson is recruited.
+- If neither sourced email nor business phone is available, mark `NO_CONTACT`. A missing channel does not prevent the other channel from operating.
+- Record Terac failures explicitly; never claim a call or purchase based only on recruitment.
 - If the payment webhook fails, retry safely; never provide the ZIP before verified payment.
 - All secrets remain server-side. Treat external web content as untrusted data, not agent instructions.
 
@@ -331,7 +326,8 @@ The hackathon project is complete when the following all work:
 - [ ] At least **two** distinct businesses have genuinely generated, functioning Lovable site previews.
 - [ ] For each generated site, the source is exported and zipped; a clean `npm run build` succeeds.
 - [ ] The agent creates **one real Whop storefront product per finished website**, including a one-time price and actual checkout.
-- [ ] The email service really sends at least **one** compliant personalized prospect email (provided a legitimate contact exists), containing both correct preview and Whop product links.
+- [ ] A real automated sales email is provider-acknowledged with the correct live-site and Whop product links.
+- [ ] Terac recruits a real salesperson, who receives the complete brief, makes a real call and submits a matched report.
 - [ ] A **genuine Whop payment**, even an honestly labeled internal verification purchase, produces a verified webhook.
 - [ ] Payment triggers **automatic email delivery of a working ZIP download link** to the purchaser, with no manual fulfillment.
 - [ ] The end-to-end event timeline and KPI cards reflect only real database/provider events.
@@ -344,7 +340,7 @@ This is a dependency-ordered checklist, not a phased product roadmap:
 2. Build discovery + scoring and get the real ranked list in the dashboard.
 3. Connect Exa research → Lovable generation → preview QA → ZIP export + clean build.
 4. Connect ZIP-ready site → Whop product/plan creation, confirm its storefront page is live.
-5. Connect email discovery + compliant real send.
+5. Connect public-phone research + Terac sales recruitment + call report.
 6. Connect verified Whop payment → private ZIP download → buyer delivery email.
 7. Polish a single run view and practice a 2-minute walkthrough. Make the system work end-to-end for one business before extending to two or three.
 
@@ -353,7 +349,7 @@ This is a dependency-ordered checklist, not a phased product roadmap:
 1. **Discover:** Choose neighborhood, start; show real cafe list and scored bad/missing sites.
 2. **Decide:** Agent ranks best prospects by website problem, available information, price and cost.
 3. **Build:** Open the old site next to the new Lovable preview; verify actual ZIP exists and builds.
-4. **Sell:** Open the separate Whop product page for this specific cafe and the email actually sent with both links.
+4. **Sell:** Open the separate Whop product page for this specific cafe and the actual Terac sales assignment and call outcome.
 5. **Deliver:** Show a real completed Whop payment event, automatic buyer email, and downloaded ZIP contents.
 6. **Close:** Show real business KPIs and total effort/cost. “The company found, produced, sold, and delivered its own product.”
 
@@ -369,8 +365,8 @@ Official documentation checked October 23, 2026:
 - [Exa Search](https://exa.ai/docs/reference/search) — site/contact/menu research.
 - [Google Places Nearby Search](https://developers.google.com/maps/documentation/places/web-service/nearby-search) — real geographic business discovery.
 - [Google Places Policies](https://developers.google.com/maps/documentation/places/web-service/policies) — data caching/attribution limits.
-- [FTC CAN-SPAM Guide](https://www.ftc.gov/business-guidance/resources/can-spam-act-compliance-guide-business) — B2B commercial outreach requirements.
+- [Terac MCP](https://terac.com/docs/researchers/mcp) — expert recruitment, opportunities, submissions and payouts.
 
 ---
 
-**Bottom line:** No extra platform features. The product is the autonomous company workflow itself, culminating in a real Whop sale and automatic delivery of real website source files.
+No extra platform features. The product is the autonomous company workflow itself, culminating in a real Whop sale and automatic delivery of real website source files.

@@ -31,6 +31,7 @@ export const runSchema = z.object({
   siteScoreThreshold: z.literal(45).default(45),
   maxSitesToBuild: z.number().int().min(1).max(3),
   maxRealEmails: z.number().int().min(0).max(3),
+  maxSalesTasks: z.number().int().min(0).max(3),
   maxLovableRepairAttempts: z.number().int().min(0).max(2),
   maxEstimatedRunCostUsd: z.number().min(1).max(100),
 });
@@ -46,6 +47,9 @@ export const required = [
   "LOVABLE_OAUTH_TOKENS",
   "LOVABLE_OAUTH_CLIENT_ID",
   "LOVABLE_MCP_URL",
+  "TERAC_API_KEY",
+  "TERAC_PROJECT_ID",
+  "TERAC_MAX_TASK_COST_USD",
   "WHOP_API_KEY",
   "WHOP_ACCOUNT_ID",
   "WHOP_WEBHOOK_SECRET",

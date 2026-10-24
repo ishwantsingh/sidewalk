@@ -2,9 +2,17 @@ import { NextResponse } from "next/server";
 import { unwrapWebhook } from "@whop/sdk/helpers";
 import { z } from "zod";
 import { env, missingConfig, runSchema } from "../../../lib/config";
+import { verifySignature } from "../../../lib/mail";
+import { validSalesSignature } from "../../../lib/sales-access";
+import {
+  callReportSchema,
+  verifySalesSubmission,
+  SalesReviewRequired,
+} from "../../../lib/sales";
+import { Terac } from "../../../lib/terac";
 import { sameOrigin } from "../../../lib/origin";
 import { db, insert, one, rows, update } from "../../../lib/db";
-import { verifySignature } from "../../../lib/mail";
+
 import { acceptPayment, hashToken } from "../../../lib/fulfillment";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -84,6 +92,64 @@ async function handler(request: Request, ctx: Context) {
     }
     if (!["GET", "HEAD"].includes(method) && !sameOrigin(request))
       return response({ error: "Forbidden origin" }, 403);
+    if (
+      path[0] === "sales" &&
+      path.length === 2 &&
+      ["GET", "POST"].includes(method)
+    ) {
+      const id = z.uuid().parse(path[1]);
+      const signature =
+        new URL(request.url).searchParams.get("signature") ?? "";
+      if (!validSalesSignature(id, signature))
+        return response({ error: "Invalid sales brief link" }, 403);
+      const task = await one("sales_tasks", id);
+      if (method === "GET")
+        return response({
+          id: task.id,
+          brief: task.brief,
+          status: task.status,
+          report: task.report,
+        });
+      if (task.status !== "RECRUITING")
+        return response(
+          { error: "This task is not accepting a new report" },
+          409,
+        );
+      const report = callReportSchema.parse(await request.json());
+      if (
+        new Date(report.calledAt).getTime() <
+        new Date(task.created_at).getTime()
+      )
+        return response({ error: "Call predates the assignment" }, 400);
+      const terac = new Terac();
+      try {
+        await terac.connect();
+        await verifySalesSubmission(terac, task, report.submissionId);
+      } finally {
+        await terac.close().catch(() => {});
+      }
+      if (report.outcome === "DO_NOT_CALL") {
+        const { error } = await db()
+          .from("sales_suppressions")
+          .upsert({ phone: task.brief.phone.replace(/\D/g, "") });
+        if (error) throw error;
+      }
+      const { data, error } = await db()
+        .from("sales_tasks")
+        .update({
+          report,
+          status: "REPORTED",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id)
+        .eq("status", "RECRUITING")
+        .select("id")
+        .maybeSingle();
+      if (error) throw error;
+      if (!data)
+        return response({ error: "A report has already been submitted" }, 409);
+      return response({ recorded: true });
+    }
     if (route === "config" && method === "GET")
       return response({ missing: missingConfig() });
     if (route === "runs" && method === "POST") {
@@ -127,7 +193,7 @@ async function handler(request: Request, ctx: Context) {
       const { data, error } = await db()
         .from("businesses")
         .select(
-          "*,audits(*),opportunities(*),sites(*,products(*)),emails(*),events(action,created_at)",
+          "*,audits(*),opportunities(*),sites(*,products(*)),emails(*),sales_tasks(*),events(action,created_at)",
         )
         .order("created_at", { ascending: false })
         .limit(300);
@@ -151,6 +217,7 @@ async function handler(request: Request, ctx: Context) {
         sites,
         products,
         emails: await rows("emails", "business_id", id),
+        sales_tasks: await rows("sales_tasks", "business_id", id),
         orders,
         events: await rows("events", "business_id", id),
       });
@@ -190,6 +257,8 @@ async function handler(request: Request, ctx: Context) {
     }
     return response({ error: "Not found" }, 404);
   } catch (error) {
+    if (error instanceof SalesReviewRequired)
+      return response({ error: error.message }, 403);
     if (error instanceof z.ZodError)
       return response({ error: z.prettifyError(error) }, 400);
     console.error("API request failed", error);

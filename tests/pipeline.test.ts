@@ -8,7 +8,8 @@ const f = vi.hoisted(() => ({
   inspect: vi.fn(),
   exportSite: vi.fn(),
   listProduct: vi.fn(),
-  sendMail: vi.fn(),
+  queueSalesTask: vi.fn(),
+  sendOutreach: vi.fn(),
   call: vi.fn(),
   research: vi.fn(),
 }));
@@ -39,11 +40,8 @@ vi.mock("../lib/research", () => ({
 vi.mock("../lib/audit", () => ({ inspect: f.inspect }));
 vi.mock("../lib/export", () => ({ exportSite: f.exportSite }));
 vi.mock("../lib/commerce", () => ({ listProduct: f.listProduct }));
-vi.mock("../lib/mail", () => ({
-  verifiedSender: async () => {},
-  optoutUrl: () => "https://operator.test/opt-out",
-  sendMail: f.sendMail,
-}));
+vi.mock("../lib/outreach", () => ({ sendOutreach: f.sendOutreach }));
+vi.mock("../lib/sales", () => ({ queueSalesTask: f.queueSalesTask }));
 vi.mock("../lib/lovable", () => ({
   Lovable: class {
     async connect() {}
@@ -61,6 +59,7 @@ const params: RunInput = {
   siteScoreThreshold: 45,
   maxSitesToBuild: 1,
   maxRealEmails: 1,
+  maxSalesTasks: 1,
   maxLovableRepairAttempts: 2,
   maxEstimatedRunCostUsd: 25,
 };
@@ -76,7 +75,7 @@ beforeEach(() => {
     PAYMENT_FEE_PERCENT: "3",
     PAYMENT_FEE_FIXED_USD: ".3",
     SENDER_NAME: "Test sender",
-    SENDER_POSTAL_ADDRESS: "Test postal address",
+    TERAC_MAX_TASK_COST_USD: "20",
   }))
     vi.stubEnv(key, value);
   f.reserve.mockResolvedValue({ data: true, error: null });
@@ -94,6 +93,8 @@ beforeEach(() => {
     chain: false,
     contactEmail: "venue@example.com",
     contactSource: "https://example.com/contact",
+    contactPhone: "+1 212 555 0100",
+    phoneSource: "https://example.com/contact",
     facts: [
       {
         label: "Name",
@@ -136,11 +137,17 @@ beforeEach(() => {
     storefront_url: "https://whop.com/test/test-product/",
     purchase_url: "https://whop.com/test/checkout/plan_test",
   });
-  f.sendMail.mockResolvedValue("message-test");
+  f.queueSalesTask.mockResolvedValue(undefined);
+  f.sendOutreach.mockResolvedValue({
+    status: "SENT",
+    subject: "Website concept",
+    body: "Preview and checkout",
+    providerMessageId: "email-1",
+  });
 });
 afterEach(() => vi.unstubAllEnvs());
 describe("orchestrator safety gates with isolated provider adapters", () => {
-  it("stops a broken preview after exactly two repairs, before ZIP/listing/email", async () => {
+  it("stops a broken preview after exactly two repairs, before ZIP/listing/sales", async () => {
     f.inspect.mockResolvedValue({
       score: 20,
       passed: false,
@@ -152,7 +159,7 @@ describe("orchestrator safety gates with isolated provider adapters", () => {
     ).toHaveLength(2);
     expect(f.exportSite).not.toHaveBeenCalled();
     expect(f.listProduct).not.toHaveBeenCalled();
-    expect(f.sendMail).not.toHaveBeenCalled();
+    expect(f.queueSalesTask).not.toHaveBeenCalled();
     expect(f.update).toHaveBeenCalledWith(
       "businesses",
       "businesses-test",
@@ -163,38 +170,54 @@ describe("orchestrator safety gates with isolated provider adapters", () => {
     f.exportSite.mockRejectedValue(new Error("clean build failed"));
     await runPipeline({ id: "run-test", params });
     expect(f.listProduct).not.toHaveBeenCalled();
-    expect(f.sendMail).not.toHaveBeenCalled();
+    expect(f.queueSalesTask).not.toHaveBeenCalled();
   });
-  it("never emails a product whose storefront validation failed", async () => {
+  it("never assigns a salesperson for a product whose storefront validation failed", async () => {
     f.listProduct.mockRejectedValue(new Error("incorrect storefront price"));
     await runPipeline({ id: "run-test", params });
-    expect(f.sendMail).not.toHaveBeenCalled();
+    expect(f.queueSalesTask).not.toHaveBeenCalled();
     expect(f.update).not.toHaveBeenCalledWith("businesses", "businesses-test", {
-      state: "EMAIL_SENT",
+      state: "SALES_QUEUED",
     });
   });
-  it("records email failure instead of a successful send", async () => {
-    f.sendMail.mockRejectedValue(new Error("provider rejected"));
+  it("records sales handoff failure instead of a successful assignment", async () => {
+    f.queueSalesTask.mockRejectedValue(new Error("provider rejected"));
     await runPipeline({ id: "run-test", params });
-    expect(f.update).toHaveBeenCalledWith("emails", "emails-test", {
-      status: "EMAIL_FAILED",
-    });
+    expect(f.update).toHaveBeenCalledWith(
+      "businesses",
+      "businesses-test",
+      expect.objectContaining({
+        state: "FAILED",
+        failure_stage: "SALES_HANDOFF",
+      }),
+    );
     expect(f.update).not.toHaveBeenCalledWith("businesses", "businesses-test", {
-      state: "EMAIL_SENT",
+      state: "SALES_QUEUED",
     });
   });
-  it("enforces a zero outbound email cap while retaining the finished product", async () => {
+  it("enforces a zero sales-assignment cap while retaining the finished product", async () => {
     await runPipeline({
       id: "run-test",
-      params: { ...params, maxRealEmails: 0 },
+      params: { ...params, maxSalesTasks: 0 },
     });
     expect(f.listProduct).toHaveBeenCalledOnce();
-    expect(f.sendMail).not.toHaveBeenCalled();
+    expect(f.queueSalesTask).not.toHaveBeenCalled();
   });
-  it("does not generate or email businesses with no contact", async () => {
-    const brief = await f.research();
+  it("emails an email-only business without recruiting a caller", async () => {
     f.research.mockResolvedValue({
-      ...brief,
+      ...(await f.research()),
+      contactPhone: null,
+      phoneSource: null,
+    });
+    await runPipeline({ id: "run-test", params });
+    expect(f.sendOutreach).toHaveBeenCalledOnce();
+    expect(f.queueSalesTask).not.toHaveBeenCalled();
+  });
+  it("does not build a business lacking both contact channels", async () => {
+    f.research.mockResolvedValue({
+      ...(await f.research()),
+      contactPhone: null,
+      phoneSource: null,
       contactEmail: null,
       contactSource: null,
     });
@@ -202,23 +225,74 @@ describe("orchestrator safety gates with isolated provider adapters", () => {
     expect(f.update).toHaveBeenCalledWith("businesses", "businesses-test", {
       state: "NO_CONTACT",
     });
-    expect(f.call).not.toHaveBeenCalled();
-    expect(f.sendMail).not.toHaveBeenCalled();
+    expect(f.sendOutreach).not.toHaveBeenCalled();
+    expect(f.queueSalesTask).not.toHaveBeenCalled();
   });
-  it("records SENT only with the provider message acknowledgement", async () => {
+  it("recruits a caller even if the email adapter fails", async () => {
+    f.sendOutreach.mockRejectedValue(new Error("email provider unavailable"));
     await runPipeline({ id: "run-test", params });
-    expect(f.sendMail).toHaveBeenCalledOnce();
-    expect(f.update).toHaveBeenCalledWith(
-      "emails",
-      "emails-test",
+    expect(f.queueSalesTask).toHaveBeenCalledWith(
+      "run-test",
+      "businesses-test",
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ status: "EMAIL_FAILED" }),
+    );
+  });
+  it("still sends email when recruitment fails", async () => {
+    f.queueSalesTask.mockRejectedValue(new Error("Terac unavailable"));
+    await runPipeline({ id: "run-test", params });
+    expect(f.sendOutreach).toHaveBeenCalledOnce();
+  });
+  it("honors an email-only cap independently of sales calls", async () => {
+    await runPipeline({
+      id: "run-test",
+      params: { ...params, maxRealEmails: 0 },
+    });
+    expect(f.sendOutreach).not.toHaveBeenCalled();
+    expect(f.queueSalesTask).toHaveBeenCalledWith(
+      "run-test",
+      "businesses-test",
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      { status: "SEND_LIMIT" },
+    );
+  });
+  it("hands the verified live website and exact Whop listing to the salesperson", async () => {
+    await runPipeline({ id: "run-test", params });
+    expect(f.queueSalesTask).toHaveBeenCalledOnce();
+    expect(f.queueSalesTask).toHaveBeenCalledWith(
+      "run-test",
+      "businesses-test",
+      expect.objectContaining({ contactPhone: "+1 212 555 0100" }),
+      expect.objectContaining({
+        preview_url: "https://published.example",
+        qa_status: "PASSED",
+        zip_path: "private/source.zip",
+      }),
+      expect.objectContaining({
+        storefront_url: "https://whop.com/test/test-product/",
+      }),
+      expect.anything(),
       expect.objectContaining({
         status: "SENT",
-        provider_message_id: "message-test",
+        subject: "Website concept",
+        providerMessageId: "email-1",
       }),
     );
-    expect(f.update).toHaveBeenCalledWith("businesses", "businesses-test", {
-      state: "EMAIL_SENT",
+  });
+  it("qualifies a business with a sourced phone even without an email address", async () => {
+    f.research.mockResolvedValue({
+      ...(await f.research()),
+      contactEmail: null,
+      contactSource: null,
     });
+    await runPipeline({ id: "run-test", params });
+    expect(f.queueSalesTask).toHaveBeenCalledOnce();
   });
   it("does not call providers when the first spending reservation is refused", async () => {
     f.reserve.mockResolvedValue({ data: false, error: null });

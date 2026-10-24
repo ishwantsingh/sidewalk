@@ -175,6 +175,7 @@ try {
     if (route.request().method() === "POST") {
       const body = route.request().postDataJSON();
       assert.equal(body.area, "Brooklyn");
+      assert.equal(body.maxSalesTasks, 2);
       assert.equal(body.maxRealEmails, 2);
       await route.fulfill({ status: 201, json: { id: "live-run" } });
     } else
@@ -198,7 +199,7 @@ try {
     opportunities: [],
     sites: [],
     products: [],
-    emails: [],
+    sales_tasks: [],
     orders: [],
     events: [],
   };
@@ -257,8 +258,106 @@ try {
   );
   assert.equal(await page.locator('input[type="password"]').count(), 0);
   assert.equal(await page.getByRole("button", { name: "Sign out" }).count(), 0);
+  // The salesperson sees the actual handoff and can report a call on desktop/mobile.
+  const salesBrief = {
+    id: "sales-test",
+    status: "RECRUITING",
+    report: null,
+    brief: {
+      business: "Test Cafe",
+      category: "cafe",
+      phone: "+1 212 555 0100",
+      phoneSource: "https://example.com/contact",
+      liveWebsite: "https://preview.example.com",
+      storefront: "https://whop.com/shop/cafe",
+      checkout: "https://whop.com/checkout/plan_test",
+      priceUsd: 199,
+      salesEmail: {
+        status: "SENT",
+        address: "owner@example.com",
+        subject: "We made a website concept for Test Cafe",
+        body: "Here are your preview and Whop links.",
+        sentAt: "2026-10-24T14:00:00Z",
+      },
+      offer:
+        "One-time website source ZIP. Automatic delivery after Whop payment.",
+      instructions:
+        "Make one call during business hours and report the result.",
+      facts: [
+        {
+          label: "Address",
+          value: "123 Test Street",
+          source: "https://example.com/contact",
+        },
+      ],
+      websiteFindings: { classification: "NO_WEBSITE", defects: [] },
+    },
+  };
+  await page.route("**/api/sales/**", async (route) => {
+    if (route.request().method() === "POST") {
+      const body = route.request().postDataJSON();
+      assert.equal(body.submissionId, "sub-test");
+      assert.equal(body.outcome, "NO_ANSWER");
+      assert.equal(body.notes, "Called the public phone; no answer.");
+      await route.fulfill({ json: { recorded: true } });
+    } else await route.fulfill({ json: salesBrief });
+  });
+  await page.goto(
+    `${origin}/sales/sales-test?signature=test&submissionId=sub-test`,
+  );
+  await page
+    .getByRole("heading", { name: "Sales assignment", exact: true })
+    .waitFor();
+  assert.equal(
+    await page
+      .getByRole("link", { name: "View the completed website" })
+      .getAttribute("href"),
+    salesBrief.brief.liveWebsite,
+  );
+  assert.equal(
+    await page
+      .getByRole("link", { name: "Whop product page" })
+      .getAttribute("href"),
+    salesBrief.brief.storefront,
+  );
+  assert.equal(
+    await page
+      .getByRole("textbox", { name: "Terac submission ID" })
+      .inputValue(),
+    "sub-test",
+  );
+  await page
+    .getByText("We made a website concept for Test Cafe", { exact: false })
+    .waitFor();
+  await page.screenshot({
+    path: "artifacts/sales-brief-desktop.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 375, height: 844 });
+  assert(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+    "Sales brief overflows mobile",
+  );
+  await page
+    .getByRole("combobox", { name: "Outcome" })
+    .selectOption("NO_ANSWER");
+  await page
+    .getByRole("textbox", { name: "Call notes" })
+    .fill("Called the public phone; no answer.");
+  await page.screenshot({
+    path: "artifacts/sales-brief-mobile.png",
+    fullPage: true,
+  });
+  await page.getByRole("button", { name: "Submit call report" }).click();
+  await page
+    .getByRole("status")
+    .filter({ hasText: "Call report recorded" })
+    .waitFor();
+  assert.equal(errors.length, 0, errors.join("\n"));
   console.log(
-    "PASS browser: JSON demo, grayscale, charts, search, filters, detail, keyboard, mobile, configuration gating, live empty state and fetch errors.",
+    "PASS browser: JSON demo, grayscale, charts, search, filters, detail, keyboard, mobile, configuration gating, live empty state, fetch errors and salesperson handoff/report.",
   );
 } finally {
   await browser?.close();

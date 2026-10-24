@@ -1,8 +1,9 @@
-import { loadEnvConfig } from "@next/env";
-loadEnvConfig(process.cwd());
+import nextEnv from "@next/env";
+nextEnv.loadEnvConfig(process.cwd());
 const { db, update, event } = await import("../lib/db");
 const { missingConfig } = await import("../lib/config");
 const { runPipeline } = await import("./pipeline");
+const { salesTick } = await import("../lib/sales");
 const { deliverOrder } = await import("../lib/fulfillment");
 const missing = missingConfig();
 if (missing.length)
@@ -10,7 +11,8 @@ if (missing.length)
     `Configure .env.local before starting worker: ${missing.join(", ")}`,
   );
 let stopping = false,
-  delivering = false;
+  delivering = false,
+  selling = false;
 process.on("SIGTERM", () => {
   stopping = true;
 });
@@ -57,6 +59,19 @@ async function deliveries() {
     delivering = false;
   }
 }
+async function sales() {
+  if (selling || stopping) return;
+  selling = true;
+  try {
+    await salesTick();
+  } catch (error) {
+    console.error("Sales queue failed", error);
+  } finally {
+    selling = false;
+  }
+}
+const salesTimer = setInterval(() => void sales(), 15000);
+void sales();
 // Keep fulfillment responsive while the same worker awaits a long Lovable build.
 const deliveryTimer = setInterval(() => void deliveries(), 3000);
 console.log("Sidewalk worker ready");
@@ -89,4 +104,5 @@ while (!stopping) {
   if (!stopping) await new Promise((r) => setTimeout(r, 3000));
 }
 clearInterval(deliveryTimer);
-while (delivering) await new Promise((r) => setTimeout(r, 100));
+clearInterval(salesTimer);
+while (delivering || selling) await new Promise((r) => setTimeout(r, 100));

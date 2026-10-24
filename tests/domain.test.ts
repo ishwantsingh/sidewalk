@@ -33,7 +33,26 @@ describe("qualification rules", () => {
       0.25 * (199 - 5.97 - 0.3) - 5 - 0.2,
     );
   });
-  it("rejects unsafe spending/build/send limits", () => {
+  it("includes the full salesperson allowance even when no sale occurs", () => {
+    const without = economics(null, "NO_WEBSITE", true, 1, 199, 5, 0.2, 3, 0.3);
+    const withSales = economics(
+      null,
+      "NO_WEBSITE",
+      true,
+      1,
+      199,
+      5,
+      0.2,
+      3,
+      0.3,
+      20,
+    );
+    expect(withSales.expected_contribution).toBeCloseTo(
+      without.expected_contribution - 20,
+    );
+    expect(withSales.estimated_sales_cost).toBe(20);
+  });
+  it("rejects unsafe spending/build/sales limits", () => {
     const valid = {
       area: "Brooklyn",
       radiusMeters: 1300,
@@ -41,13 +60,14 @@ describe("qualification rules", () => {
       maxBusinesses: 20,
       maxSitesToBuild: 3,
       maxRealEmails: 3,
+      maxSalesTasks: 3,
       maxLovableRepairAttempts: 2,
       maxEstimatedRunCostUsd: 25,
     };
     expect(runSchema.safeParse(valid).success).toBe(true);
     for (const override of [
       { maxSitesToBuild: 4 },
-      { maxRealEmails: 4 },
+      { maxSalesTasks: 4 },
       { maxLovableRepairAttempts: 3 },
       { radiusMeters: 50001 },
       { maxEstimatedRunCostUsd: -1 },

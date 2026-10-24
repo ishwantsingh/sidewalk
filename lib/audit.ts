@@ -198,7 +198,7 @@ export async function inspect(
       if (!/unofficial concept.*not affiliated/is.test(metrics.text))
         gateDefects.push("Missing unofficial concept notice");
       if (!metrics.noindex) gateDefects.push("Missing noindex directive");
-      if (!hasContact && brief?.contactEmail)
+      if (!hasContact && (brief?.contactEmail || brief?.contactPhone))
         gateDefects.push("Contact navigation failed");
     }
     return {
