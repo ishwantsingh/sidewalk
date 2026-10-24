@@ -1,4 +1,4 @@
-import { loadEnvConfig } from "@next/env";
+import nextEnv from "@next/env";
 import { createServer } from "node:http";
 import { readFile, writeFile } from "node:fs/promises";
 import { auth } from "@modelcontextprotocol/sdk/client/auth.js";
@@ -8,7 +8,7 @@ import type {
   OAuthTokens,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
 import { randomBytes } from "node:crypto";
-loadEnvConfig(process.cwd());
+nextEnv.loadEnvConfig(process.cwd());
 const url = new URL(process.env.LOVABLE_MCP_URL || "https://mcp.lovable.dev");
 let client: OAuthClientInformationMixed | undefined = process.env
   .LOVABLE_OAUTH_CLIENT_ID

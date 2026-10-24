@@ -1,12 +1,13 @@
 import { db, insert, update, rows, event } from "../lib/db";
-import { RunInput, cost, env } from "../lib/config";
+import { RunInput, cost } from "../lib/config";
 import { discover, research, Brief } from "../lib/research";
 import { classify, economics, identityKey } from "../lib/domain";
 import { inspect } from "../lib/audit";
 import { Lovable } from "../lib/lovable";
 import { exportSite } from "../lib/export";
 import { listProduct } from "../lib/commerce";
-import { sendMail, verifiedSender, optoutUrl } from "../lib/mail";
+import { sendOutreach, type SalesEmailContext } from "../lib/outreach";
+import { queueSalesTask } from "../lib/sales";
 async function reserve(
   run: string,
   business: string | null,
@@ -98,6 +99,8 @@ export async function runPipeline(run: { id: string; params: RunInput }) {
         website_url: brief.officialWebsite,
         email: brief.contactEmail,
         email_source: brief.contactSource,
+        phone: brief.contactPhone,
+        phone_source: brief.phoneSource,
         source_urls: [...new Set(brief.facts.map((f) => f.source))],
         brief,
         state: "DISCOVERED",
@@ -141,7 +144,7 @@ export async function runPipeline(run: { id: string; params: RunInput }) {
       const economicsData = economics(
         audit.score,
         audit.classification,
-        !!brief.contactEmail,
+        !!(brief.contactPhone || brief.contactEmail),
         Math.min(1, brief.facts.length / 6),
         cost("SALE_PRICE_USD"),
         cost("COST_LOVABLE_BUILD_USD") +
@@ -150,6 +153,9 @@ export async function runPipeline(run: { id: string; params: RunInput }) {
         cost("COST_EXA_SEARCH_USD") + cost("COST_MODEL_RESEARCH_USD") * 2,
         cost("PAYMENT_FEE_PERCENT"),
         cost("PAYMENT_FEE_FIXED_USD"),
+        brief.contactPhone && p.maxSalesTasks > 0
+          ? cost("TERAC_MAX_TASK_COST_USD")
+          : 0,
       );
       await insert("opportunities", {
         business_id: business.id,
@@ -157,13 +163,13 @@ export async function runPipeline(run: { id: string; params: RunInput }) {
       });
       const qualified =
         ["NO_WEBSITE", "POOR_WEBSITE"].includes(audit.classification) &&
-        !!brief.contactEmail &&
+        !!(brief.contactPhone || brief.contactEmail) &&
         !brief.chain &&
         !!location &&
         brief.facts.length >= 3 &&
         economicsData.expected_contribution > 0;
       await update("businesses", business.id, {
-        state: !brief.contactEmail
+        state: !(brief.contactPhone || brief.contactEmail)
           ? "NO_CONTACT"
           : qualified
             ? "QUALIFIED"
@@ -193,13 +199,13 @@ export async function runPipeline(run: { id: string; params: RunInput }) {
       );
     }
   }
-  let sends = 0;
+  let salesTasks = 0,
+    sends = 0;
   for (const candidate of candidates
     .sort((a, b) => b.opportunity.priority - a.opportunity.priority)
     .slice(0, p.maxSitesToBuild)) {
     const { business, brief, opportunity, audit } = candidate;
     let stage = "BUILDING";
-    let outreachEmailId: string | undefined;
     const lovable = new Lovable();
     try {
       await reserve(
@@ -300,6 +306,8 @@ export async function runPipeline(run: { id: string; params: RunInput }) {
       stage = "WHOP_LISTED";
       site = {
         ...site,
+        ...zip,
+        qa_status: "PASSED",
         preview_url: live,
         screenshot_url: liveQa.screenshot_url,
       };
@@ -315,75 +323,79 @@ export async function runPipeline(run: { id: string; params: RunInput }) {
         stage,
         `Verified product page: ${product.storefront_url}`,
       );
-      if (sends >= p.maxRealEmails) {
+      let email: SalesEmailContext;
+      if (!brief.contactEmail) {
+        email = { status: "NO_EMAIL" };
+      } else if (sends >= p.maxRealEmails) {
+        email = { status: "SEND_LIMIT" };
         await event(
           id,
           business.id,
           "SEND_LIMIT",
-          "Product ready; run email cap reached",
+          "Product ready; run email cap reached. Sales calls remain eligible.",
+        );
+      } else {
+        sends++; // Count attempts conservatively even if the provider acknowledgement is lost.
+        try {
+          email = await sendOutreach(
+            id,
+            business.id,
+            brief,
+            site,
+            product,
+            audit,
+          );
+        } catch (error) {
+          email = {
+            status: "EMAIL_FAILED",
+            error: error instanceof Error ? error.message : String(error),
+          };
+          await event(id, business.id, "EMAIL_FAILED", email.error!);
+        }
+      }
+      if (!brief.contactPhone) {
+        await event(
+          id,
+          business.id,
+          "NO_PHONE",
+          "Email processed; no sourced business phone for a sales call.",
         );
         continue;
       }
-      stage = "EMAIL_FAILED";
-      const { data: suppressed, error: suppressionError } = await db()
-        .from("emails")
-        .select("id")
-        .ilike("address", brief.contactEmail!)
-        .eq("opted_out", true);
-      if (suppressionError) throw suppressionError;
-      if (suppressed.length) {
+      if (email.status === "OPTED_OUT") {
         await event(
           id,
           business.id,
           "OPTED_OUT",
-          "Recipient previously opted out; outreach skipped.",
+          "Business declined future offers; no sales caller assigned.",
         );
         continue;
       }
-      await verifiedSender();
-      const email = await insert("emails", {
-        business_id: business.id,
-        address: brief.contactEmail,
-        status: "PENDING",
-      });
-      outreachEmailId = email.id;
-      const optout = optoutUrl(email.id);
-      const gap =
-        audit.classification === "NO_WEBSITE"
-          ? "we could not find an official website after checking independent public sources"
-          : `your website has a specific issue: ${audit.defects[0]}`;
-      sends++; // Count attempts conservatively: a timeout can hide an accepted send.
-      const message = await sendMail(
-        brief.contactEmail!,
-        `We made a website concept for ${brief.name}`,
-        `Hi ${brief.name} team,\n\nWe noticed ${gap}, so we created an unofficial website concept for your business.\n\nPreview the finished site: ${live}\nBuy the website source files: ${product.storefront_url}\n\nThe website is already built. If you purchase it on Whop, you will automatically receive a ZIP with the code and setup instructions. The one-time price is $${opportunity.quoted_price}.\n\nThis is a commercial offer from Sidewalk AI, not a message sent by or on behalf of your business.\n\n${env("SENDER_NAME")}\n${env("SENDER_POSTAL_ADDRESS")}\nOpt out of future offers: ${optout}`,
-        `outreach-${email.id}`,
-        {
-          "List-Unsubscribe": `<${optout}>`,
-          "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-        },
-      );
-      await update("emails", email.id, {
-        provider_message_id: message,
-        status: "SENT",
-        sent_at: new Date().toISOString(),
-      });
-      await update("businesses", business.id, { state: "EMAIL_SENT" });
-      await event(
+      if (salesTasks >= p.maxSalesTasks) {
+        await event(
+          id,
+          business.id,
+          "SALES_LIMIT",
+          "Product ready; run sales-task cap reached",
+        );
+        continue;
+      }
+      stage = "SALES_HANDOFF";
+      salesTasks++;
+      await reserve(
         id,
         business.id,
-        "EMAIL_SENT",
-        `Provider acknowledged ${message}; recipient ${brief.contactEmail}`,
+        "TERAC_SALES_BUDGET",
+        cost("TERAC_MAX_TASK_COST_USD"),
       );
+      await queueSalesTask(id, business.id, brief, site, product, audit, email);
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       await update("businesses", business.id, {
-        state: stage === "EMAIL_FAILED" ? "EMAIL_FAILED" : "FAILED",
+        state: "FAILED",
         failure_stage: stage,
         failure_reason: reason,
       });
-      if (stage === "EMAIL_FAILED" && outreachEmailId)
-        await update("emails", outreachEmailId, { status: "EMAIL_FAILED" });
       await event(id, business.id, "FAILED", `${stage}: ${reason}`);
     } finally {
       await lovable.close().catch(() => {});

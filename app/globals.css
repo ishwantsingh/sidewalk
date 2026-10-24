@@ -720,3 +720,29 @@ tbody tr:hover {
     scroll-behavior: auto !important;
   }
 }
+
+.sales-brief {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 40px 24px;
+  overflow-wrap: anywhere;
+}
+.sales-brief h1,
+.sales-brief h2,
+.sales-brief h3 {
+  margin-top: 28px;
+}
+.sales-brief p {
+  line-height: 1.65;
+  margin: 16px 0;
+}
+.sales-brief form {
+  margin-top: 32px;
+}
+.sales-brief textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font: inherit;
+}

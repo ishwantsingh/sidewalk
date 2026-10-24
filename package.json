@@ -15,7 +15,8 @@
     "verify:live": "tsx scripts/verify-live.ts",
     "format": "prettier --write app lib worker scripts tests README.md package.json tsconfig.json",
     "format:check": "prettier --check app lib worker scripts tests README.md package.json tsconfig.json",
-    "test:browser": "tsx scripts/browser-test.ts"
+    "test:browser": "tsx scripts/browser-test.ts",
+    "sales:reconcile": "tsx scripts/sales-reconcile.ts"
   },
   "keywords": [],
   "author": "",

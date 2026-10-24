@@ -174,6 +174,7 @@ export default function Dashboard() {
         siteScoreThreshold: 45,
         maxSitesToBuild: Number(f.get("maxSitesToBuild")),
         maxRealEmails: Number(f.get("maxRealEmails")),
+        maxSalesTasks: Number(f.get("maxSalesTasks")),
         maxLovableRepairAttempts: 2,
         maxEstimatedRunCostUsd: Number(f.get("maxEstimatedRunCostUsd")),
       });
@@ -394,7 +395,8 @@ export default function Dashboard() {
             </button>
             <h2 id="run-title">New run</h2>
             <p>
-              Real searches, site builds and commercial emails. Set your limits.
+              Real searches, site builds, sales emails and Terac sales calls.
+              Set your limits.
             </p>
             {demo && (
               <div className="notice">
@@ -457,9 +459,20 @@ export default function Dashboard() {
                   />
                 </label>
                 <label>
-                  Maximum real emails
+                  Maximum sales emails
                   <input
                     name="maxRealEmails"
+                    type="number"
+                    defaultValue={2}
+                    min={0}
+                    max={3}
+                    required
+                  />
+                </label>
+                <label>
+                  Maximum sales assignments
+                  <input
+                    name="maxSalesTasks"
                     type="number"
                     defaultValue={2}
                     min={0}
@@ -472,7 +485,7 @@ export default function Dashboard() {
                   <input
                     name="maxEstimatedRunCostUsd"
                     type="number"
-                    defaultValue={25}
+                    defaultValue={75}
                     min={1}
                     max={100}
                     required
@@ -480,8 +493,9 @@ export default function Dashboard() {
                 </label>
               </div>
               <p className="form-note">
-                Up to 2 repairs per site. Only qualified prospects with sourced
-                contact emails enter the sales cycle.
+                Up to 2 repairs per site. Qualified prospects receive an email
+                when a sourced address is available and a Terac call when a
+                sourced phone is available.
               </p>
               <button disabled={loading || demo || !ready}>
                 {loading ? "Starting…" : "Start run"}
@@ -602,15 +616,63 @@ export default function Dashboard() {
             ) : (
               <p className="muted">No site generated.</p>
             )}
-            <h3>Contact & delivery</h3>
+            <h3>Sales & delivery</h3>
+            <p>
+              {detail.phone ?? "No sourced business phone"}
+              <small>{detail.phone_source}</small>
+            </p>
             <p>
               {detail.email ?? "No sourced business email"}
               <small>{detail.email_source}</small>
             </p>
-            <p>
-              Outreach: {detail.emails[0]?.status ?? "Not sent"}{" "}
-              {detail.emails[0]?.provider_message_id}
-            </p>
+            {detail.emails?.map((email: Row) => (
+              <div className="notice" key={email.id}>
+                <p>
+                  Sales email: {label(email.status)} · {email.address}
+                </p>
+                {email.provider_message_id && (
+                  <small>Provider: {email.provider_message_id}</small>
+                )}
+                {email.error && <p className="error">{email.error}</p>}
+                {email.subject && (
+                  <details>
+                    <summary>{email.subject}</summary>
+                    <p style={{ whiteSpace: "pre-wrap" }}>{email.body}</p>
+                  </details>
+                )}
+              </div>
+            ))}
+            {detail.sales_tasks?.length ? (
+              detail.sales_tasks.map((task: Row) => (
+                <div className="notice" key={task.id}>
+                  <p>
+                    Terac: {label(task.status)}
+                    {task.terac_opportunity_id
+                      ? ` · ${task.terac_opportunity_id}`
+                      : ""}
+                  </p>
+                  <p>
+                    Sales budget: {money(Number(task.max_cost_usd))}
+                    {task.quoted_cost_usd != null
+                      ? ` · Quote: ${money(Number(task.quoted_cost_usd))}`
+                      : ""}
+                  </p>
+                  {task.error && <p className="error">{task.error}</p>}
+                  {task.report && (
+                    <>
+                      <p>
+                        Call outcome: {label(task.report.outcome)} ·
+                        self-reported
+                      </p>
+                      <p>{task.report.notes}</p>
+                    </>
+                  )}
+                  <small>Only a verified Whop payment confirms a sale.</small>
+                </div>
+              ))
+            ) : (
+              <p>No salesperson assigned.</p>
+            )}
             {detail.orders.map((o: Row) => (
               <div className="notice" key={o.id}>
                 <p>

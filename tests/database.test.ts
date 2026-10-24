@@ -104,15 +104,62 @@ describe("PostgreSQL persistence and invariants", () => {
     expect((await claim()).rows).toHaveLength(1);
     expect((await claim()).rows).toHaveLength(0);
   });
+  it("allows exactly one sales task per business while retaining sales email storage", async () => {
+    await pg.query(
+      "insert into sales_tasks(run_id,business_id,brief,max_cost_usd) values($1,$2,'{}',20)",
+      [run, business],
+    );
+    await expect(
+      pg.query(
+        "insert into sales_tasks(run_id,business_id,brief,max_cost_usd) values($1,$2,'{}',20)",
+        [run, business],
+      ),
+    ).rejects.toThrow();
+    expect(
+      (await pg.query("select to_regclass('emails') as table_name")).rows[0],
+    ).toEqual({ table_name: "emails" });
+    await expect(
+      pg.exec("update sales_tasks set status='PAID'"),
+    ).rejects.toThrow();
+  });
+  it("migrates existing databases and queued run limits", async () => {
+    const legacy = new PGlite();
+    try {
+      await legacy.exec(`create table runs(id uuid primary key default gen_random_uuid(),params jsonb);
+        create table businesses(id uuid primary key default gen_random_uuid(),state text,failure_stage text,failure_reason text);
+        create table opportunities(id uuid primary key default gen_random_uuid());
+        create table emails(id uuid primary key);
+        insert into runs(params) values ('{"maxRealEmails":2,"area":"Brooklyn"}');
+        insert into businesses(state) values ('EMAIL_SENT');`);
+      await legacy.exec(
+        await readFile("supabase/migrations/20261024_terac_sales.sql", "utf8"),
+      );
+      expect((await legacy.query("select params from runs")).rows[0]).toEqual({
+        params: { maxSalesTasks: 2, maxRealEmails: 2, area: "Brooklyn" },
+      });
+      expect(
+        (await legacy.query("select state from businesses")).rows[0],
+      ).toEqual({ state: "EMAIL_SENT" });
+      expect(
+        (await legacy.query("select to_regclass('emails') as table_name"))
+          .rows[0],
+      ).toEqual({ table_name: "emails" });
+      expect((await legacy.query("select * from sales_tasks")).rows).toEqual(
+        [],
+      );
+    } finally {
+      await legacy.close();
+    }
+  });
   it("keeps ZIP storage private and enables row security for all business data", async () => {
     const bucket = await pg.query<{ public: boolean }>(
       `select public from storage.buckets where id='website-zips'`,
     );
     expect(bucket.rows[0].public).toBe(false);
     const tables = await pg.query<{ relname: string; relrowsecurity: boolean }>(
-      `select relname,relrowsecurity from pg_class where relname in ('runs','businesses','audits','opportunities','sites','products','emails','orders','events')`,
+      `select relname,relrowsecurity from pg_class where relname in ('runs','businesses','audits','opportunities','sites','products','emails','sales_tasks','sales_suppressions','orders','events')`,
     );
-    expect(tables.rows).toHaveLength(9);
+    expect(tables.rows).toHaveLength(11);
     expect(tables.rows.every((row) => row.relrowsecurity)).toBe(true);
   });
 });

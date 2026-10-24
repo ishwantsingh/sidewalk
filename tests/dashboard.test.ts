@@ -15,7 +15,9 @@ describe("dashboard reporting", () => {
       built: 6,
       delivered: 2,
     });
-    expect(summary.pipeline.map((s) => s.value)).toEqual([12, 10, 6, 5, 4, 2]);
+    expect(summary.pipeline.map((s) => s.value)).toEqual([
+      12, 10, 6, 5, 4, 4, 2,
+    ]);
     expect(
       dailyTotals(demo.overview.orders, demo.overview.events, demo.asOf).reduce(
         (s, d) => s + d.revenue,
@@ -53,20 +55,20 @@ describe("dashboard reporting", () => {
       delivered: 1,
     });
   });
-  it("does not count rejected prospects, unexported builds, unverified products, or failed emails", () => {
+  it("does not count rejected prospects, unexported builds, unverified products, or unlaunched sales tasks", () => {
     const result = summarize(
       [
         {
           state: "REJECTED",
           opportunities: [{ priority: 100 }],
           sites: [{ qa_status: "PASSED", products: [{ verified: false }] }],
-          emails: [{ status: "FAILED" }],
+          sales_tasks: [{ status: "NEEDS_REVIEW" }],
         },
       ],
       [],
       [],
     );
-    expect(result.pipeline.map((s) => s.value)).toEqual([1, 0, 0, 0, 0, 0]);
+    expect(result.pipeline.map((s) => s.value)).toEqual([1, 0, 0, 0, 0, 0, 0]);
     expect(summarize([], [], []).revenue).toBe(0);
   });
   it("keeps demo orders linked to real fixture businesses and products", () => {

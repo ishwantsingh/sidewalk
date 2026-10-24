@@ -1,13 +1,16 @@
-import { loadEnvConfig } from "@next/env";
+import nextEnv from "@next/env";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { chromium } from "playwright";
 import { missingConfig, env } from "../lib/config";
 import { db } from "../lib/db";
 import { verifiedSender } from "../lib/mail";
+import { Terac } from "../lib/terac";
+import { salesOpportunity } from "../lib/sales";
+import { teracArguments } from "../lib/terac";
 import { Lovable } from "../lib/lovable";
 import { whop } from "../lib/commerce";
-loadEnvConfig(process.cwd());
+nextEnv.loadEnvConfig(process.cwd());
 const missing = missingConfig();
 if (missing.length)
   throw new Error(`Missing .env.local values: ${missing.join(", ")}`);
@@ -27,8 +30,10 @@ const tasks: [string, () => Promise<unknown>][] = [
   [
     "Database schema",
     async () => {
-      const { error } = await db().from("runs").select("id").limit(1);
-      if (error) throw error;
+      for (const table of ["runs", "sales_tasks", "sales_suppressions"]) {
+        const { error } = await db().from(table).select("*").limit(1);
+        if (error) throw error;
+      }
     },
   ],
   [
@@ -51,7 +56,44 @@ const tasks: [string, () => Promise<unknown>][] = [
       if (!data.public) throw new Error("Screenshot bucket must be public");
     },
   ],
-  ["Verified email sender", verifiedSender],
+  [
+    "Terac MCP sales contract",
+    async () => {
+      const terac = new Terac();
+      try {
+        await terac.connect();
+        const tool = terac.tools.find(
+          (t) => t.name === "terac_create_opportunity",
+        )!;
+        teracArguments(
+          tool,
+          salesOpportunity({ id: "00000000-0000-4000-8000-000000000000" }),
+        );
+        for (const [name, args] of Object.entries({
+          terac_get_opportunity: { opportunity_id: "contract-check" },
+          terac_launch_draft_opportunity: { opportunity_id: "contract-check" },
+          terac_get_submission: { submission_id: "contract-check" },
+          terac_approve_submission: { submission_id: "contract-check" },
+        }))
+          teracArguments(
+            terac.tools.find((t) => t.name === name)!,
+            args,
+          );
+        console.log(
+          "  Terac tool schemas:",
+          JSON.stringify(
+            terac.tools.map((t) => ({
+              name: t.name,
+              inputSchema: t.inputSchema,
+            })),
+          ),
+        );
+      } finally {
+        await terac.close();
+      }
+    },
+  ],
+  ["Verified buyer-delivery sender", verifiedSender],
   [
     "Whop account",
     async () => {

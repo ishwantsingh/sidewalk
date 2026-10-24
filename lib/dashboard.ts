@@ -14,6 +14,13 @@ export function summarize(businesses: Row[], orders: Row[], events: Row[]) {
   const emailed = businesses.filter((b) =>
     b.emails?.some((e: Row) => e.status === "SENT"),
   ).length;
+  const assigned = businesses.filter((b) =>
+    b.sales_tasks?.some((task: Row) =>
+      ["RECRUITING", "REPORTED", "APPROVING", "COMPLETED"].includes(
+        task.status,
+      ),
+    ),
+  ).length;
   const delivered = orders.filter(
     (o) => o.delivery_state === "DELIVERED",
   ).length;
@@ -30,7 +37,8 @@ export function summarize(businesses: Row[], orders: Row[], events: Row[]) {
       { label: "Qualified", value: qualified },
       { label: "Built", value: built },
       { label: "Listed", value: listed },
-      { label: "Contacted", value: emailed },
+      { label: "Emailed", value: emailed },
+      { label: "Sales assigned", value: assigned },
       { label: "Delivered", value: delivered },
     ],
   };

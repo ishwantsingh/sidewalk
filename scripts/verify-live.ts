@@ -1,14 +1,21 @@
-import { loadEnvConfig } from "@next/env";
+import nextEnv from "@next/env";
 import { createHash } from "node:crypto";
 import { db, rows } from "../lib/db";
 import { env } from "../lib/config";
 import { verifyProduct, whop } from "../lib/commerce";
-loadEnvConfig(process.cwd());
-const [businesses, audits, sites, products, emails, orders] = await Promise.all(
-  ["businesses", "audits", "sites", "products", "emails", "orders"].map((t) =>
-    rows(t),
-  ),
-);
+nextEnv.loadEnvConfig(process.cwd());
+const [businesses, audits, sites, products, emails, sales, orders] =
+  await Promise.all(
+    [
+      "businesses",
+      "audits",
+      "sites",
+      "products",
+      "emails",
+      "sales_tasks",
+      "orders",
+    ].map((t) => rows(t)),
+  );
 const checks: [string, boolean][] = [
   [
     "Real discovery with independent provenance",
@@ -40,8 +47,17 @@ const checks: [string, boolean][] = [
     ).size >= 2,
   ],
   [
-    "Actual prospect email acknowledged",
-    emails.some((e) => e.status === "SENT" && e.provider_message_id),
+    "Actual automated sales email acknowledged",
+    emails.some(
+      (email) => email.status === "SENT" && email.provider_message_id,
+    ),
+  ],
+  [
+    "Actual Terac sales call reported and accepted",
+    sales.some(
+      (task) =>
+        task.status === "COMPLETED" && task.report && task.terac_opportunity_id,
+    ),
   ],
   [
     "Verified payment and automatic delivery",
