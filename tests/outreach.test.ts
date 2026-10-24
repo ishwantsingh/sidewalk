@@ -96,3 +96,13 @@ it("honors a prior opt-out without sending or creating a new email", async () =>
   expect(f.sendMail).not.toHaveBeenCalled();
   expect(f.insert).not.toHaveBeenCalled();
 });
+
+it("uses an honest general offer when a weak score has no individual defect", async () => {
+  const result = await sendOutreach("run-1", "biz-1", brief, site, product, {
+    classification: "POOR_WEBSITE",
+    score: 70,
+    defects: [],
+  });
+  expect(result.body).not.toContain("undefined");
+  expect(result.body).toContain("opportunity to refresh your online presence");
+});

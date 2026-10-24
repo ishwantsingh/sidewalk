@@ -109,6 +109,7 @@ it("completes a recorded unpublished listing instead of creating another", async
   expect(f.client.products.update).toHaveBeenCalledWith({
     id: "prod_1",
     headline: "Unofficial website concept for Cafe",
+    description: expect.stringContaining("DELIVERY:"),
   });
 });
 
@@ -124,4 +125,58 @@ it("refuses to adopt a recorded product that belongs to another site", async () 
   const { listProduct } = await import("../lib/commerce");
   await expect(listProduct(site, "Cafe", 199)).rejects.toThrow("another site");
   expect(f.client.products.update).not.toHaveBeenCalled();
+});
+
+it("creates a complete buyer-facing description within Whop's limit", async () => {
+  const { listProduct } = await import("../lib/commerce");
+  await expect(listProduct(site, "Cafe", 199)).rejects.toThrow(
+    "screenshot missing",
+  );
+  const request = firstArg(f.client.products.create) as { description: string };
+  for (const text of [
+    site.preview_url,
+    "$199.00 USD",
+    "one-time",
+    "React",
+    "ZIP",
+    "README",
+    "emailed",
+    "7 days",
+    "Hosting",
+    "domain",
+    "independent concept",
+  ])
+    expect(request.description).toContain(text);
+  expect(request.description.length).toBeLessThanOrEqual(1500);
+});
+
+it("keeps the full preview and delivery terms when business context is long", async () => {
+  const { productDescription } = await import("../lib/commerce");
+  const preview = "https://" + "preview".repeat(35) + ".lovable.app";
+  const description = productDescription(
+    "Long business name ".repeat(30),
+    preview,
+    199,
+    {
+      category: "cafe".repeat(40),
+      facts: [{ label: "Address", value: "Long address ".repeat(30) }],
+    } as import("../lib/research").Brief,
+  );
+  expect(description.length).toBeLessThanOrEqual(1500);
+  expect(description).toContain(preview);
+  expect(description).toContain("DELIVERY:");
+  expect(description).toContain("Hosting, domain");
+  expect(description).toContain("independent concept");
+});
+
+it("does not verify a listing whose buyer description was not retained", async () => {
+  f.client.products.retrieve.mockResolvedValueOnce({
+    id: "prod_1",
+    metadata: { siteId: site.id },
+    gallery_images: [{ url: "https://assets.example/qa.png" }],
+  } as never);
+  const { listProduct } = await import("../lib/commerce");
+  await expect(listProduct(site, "Cafe", 199)).rejects.toThrow(
+    "description is missing or incomplete",
+  );
 });

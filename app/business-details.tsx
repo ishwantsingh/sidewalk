@@ -68,30 +68,36 @@ export function BusinessDetails({
           <li key={d}>{d}</li>
         ))}
       </ul>
-      <h3>Economics</h3>
+      <h3>Price and cost estimates</h3>
       <p className="muted">
-        Explicit conversion heuristic, not a trained prediction. Price is a
-        hypothesis; production spending is estimated.
+        Costs are estimates and do not exclude businesses from selection.
+        Priority goes to businesses with no website, then weak websites.
       </p>
       <dl>
         {Object.entries(detail.opportunities[0] ?? {})
-          .filter(([key]) => !["id", "business_id"].includes(key))
+          .filter(([key]) =>
+            [
+              "website_opportunity",
+              "quoted_price",
+              "estimated_build_cost",
+              "research_cost",
+              "estimated_sales_cost",
+              "priority",
+            ].includes(key),
+          )
           .map(([key, value]) => (
             <div key={key}>
               <dt>{label(key)}</dt>
-              <dd>
-                {key === "purchase_probability"
-                  ? `${(Number(value) * 100).toFixed(1)}%`
-                  : Number(value).toFixed(2)}
-              </dd>
+              <dd>{Number(value).toFixed(2)}</dd>
             </div>
           ))}
       </dl>
       {onBuild && !detail.sites?.length && audit && (
         <div className="notice">
           <p>
-            Explicit selection preserves this business’s real audit score.
-            Verified contacts and economics are checked before building.
+            Explicit selection preserves this business’s real audit score. A
+            sourced email or phone and business identity are checked before
+            building.
           </p>
           <button className="secondary" onClick={() => onBuild(detail)}>
             Build a concept for this business

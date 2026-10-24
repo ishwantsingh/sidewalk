@@ -22,7 +22,6 @@ describe("environment readiness", () => {
       COST_LOVABLE_BUILD_USD: "NaN",
       SALE_PRICE_USD: "0",
       TERAC_MAX_TASK_COST_USD: "-1",
-      PAYMENT_FEE_PERCENT: "101",
       WHOP_WEBHOOK_SECRET: "your-secret",
       DOWNLOAD_SIGNING_SECRET: "short",
       EMAIL_FROM: "not-an-email",
@@ -49,12 +48,7 @@ describe("environment readiness", () => {
     for (const key of required.filter(
       (k) =>
         k.startsWith("COST_") ||
-        [
-          "SALE_PRICE_USD",
-          "TERAC_MAX_TASK_COST_USD",
-          "PAYMENT_FEE_PERCENT",
-          "PAYMENT_FEE_FIXED_USD",
-        ].includes(k),
+        ["SALE_PRICE_USD", "TERAC_MAX_TASK_COST_USD"].includes(k),
     ))
       vi.stubEnv(key, "1");
     for (const [key, value] of Object.entries(valid)) vi.stubEnv(key, value);

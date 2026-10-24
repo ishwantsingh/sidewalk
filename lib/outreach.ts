@@ -36,7 +36,9 @@ export async function sendOutreach(
   const gap =
     audit.classification === "NO_WEBSITE"
       ? "we could not find an official website after checking independent public sources"
-      : `your website has a specific issue: ${audit.defects[0]}`;
+      : audit.defects?.[0]
+        ? `your website has a specific issue: ${audit.defects[0]}`
+        : "there may be an opportunity to refresh your online presence";
   const subject = `We made a website concept for ${brief.name}`;
   const body = `Hi ${brief.name} team,\n\nWe noticed ${gap}, so we created an unofficial website concept for your business.\n\nPreview the finished site: ${site.preview_url}\nBuy the website source files: ${product.storefront_url}\n\nThe website is already built. If you purchase it on Whop, you will automatically receive a ZIP with the code and setup instructions. The one-time price is $${product.amount}.\n\nThis is a commercial offer from Sidewalk AI, not a message sent by or on behalf of your business.\n\n${env("SENDER_NAME")}\n${env("SENDER_POSTAL_ADDRESS")}\nOpt out of future offers: ${optout}`;
   await update("emails", email.id, { subject, body });

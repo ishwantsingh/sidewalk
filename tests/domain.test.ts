@@ -1,56 +1,45 @@
 import { describe, it, expect } from "vitest";
 import {
   classify,
-  economics,
+  leadPriority,
   safePath,
   slug,
   identityKey,
 } from "../lib/domain";
 import { runSchema } from "../lib/config";
 describe("qualification rules", () => {
+  const brief = {
+    contactEmail: "cafe@example.com",
+    contactSource: "https://example.com/contact",
+    contactPhone: null,
+    phoneSource: null,
+  } as import("../lib/research").Brief;
   it("keeps a confirmed absent website score as N/A", () => {
     expect(classify(null, [], true)).toBe("NO_WEBSITE");
-    expect(
-      economics(null, "NO_WEBSITE", true, 1, 199, 5, 0.2, 3, 0.3)
-        .website_opportunity,
-    ).toBe(100);
   });
-  it("requires two measured defects for poor websites", () => {
-    expect(classify(44, ["one"])).toBe("NEEDS_REVIEW");
-    expect(classify(44, ["one", "two"])).toBe("POOR_WEBSITE");
-    expect(classify(45, ["one", "two"])).toBe("GOOD_WEBSITE");
+  it("accepts a weak score or one measured defect", () => {
+    expect(classify(74, [])).toBe("POOR_WEBSITE");
+    expect(classify(90, ["Mobile overflow"])).toBe("POOR_WEBSITE");
+    expect(classify(75, [])).toBe("GOOD_WEBSITE");
     expect(classify(null, ["unreachable"])).toBe("NEEDS_REVIEW");
   });
-  it("does not prioritize businesses without a sourced contact", () => {
+  it("always ranks reachable no-website businesses ahead of weak websites", () => {
+    const noSite = leadPriority("NO_WEBSITE", null, brief);
+    const poorSite = leadPriority("POOR_WEBSITE", 0, {
+      ...brief,
+      contactPhone: "212-555-0100",
+      phoneSource: "https://example.com/contact",
+    });
+    expect(noSite).toBeGreaterThan(poorSite);
+    expect(leadPriority("POOR_WEBSITE", 25, brief)).toBeGreaterThan(
+      leadPriority("POOR_WEBSITE", 70, brief),
+    );
+  });
+  it("never ranks a business with missing contact provenance or a good website", () => {
     expect(
-      economics(null, "NO_WEBSITE", false, 1, 199, 5, 0.2, 3, 0.3).priority,
+      leadPriority("NO_WEBSITE", null, { ...brief, contactSource: null }),
     ).toBe(0);
-  });
-  it("calculates expected contribution after fees and costs", () => {
-    const e = economics(null, "NO_WEBSITE", true, 1, 199, 5, 0.2, 3, 0.3);
-    expect(e.purchase_probability).toBeCloseTo(0.25);
-    expect(e.expected_contribution).toBeCloseTo(
-      0.25 * (199 - 5.97 - 0.3) - 5 - 0.2,
-    );
-  });
-  it("includes the full salesperson allowance even when no sale occurs", () => {
-    const without = economics(null, "NO_WEBSITE", true, 1, 199, 5, 0.2, 3, 0.3);
-    const withSales = economics(
-      null,
-      "NO_WEBSITE",
-      true,
-      1,
-      199,
-      5,
-      0.2,
-      3,
-      0.3,
-      20,
-    );
-    expect(withSales.expected_contribution).toBeCloseTo(
-      without.expected_contribution - 20,
-    );
-    expect(withSales.estimated_sales_cost).toBe(20);
+    expect(leadPriority("GOOD_WEBSITE", 95, brief)).toBe(0);
   });
   it("rejects unsafe spending/build/sales limits", () => {
     const valid = {

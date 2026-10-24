@@ -230,7 +230,16 @@ export function BusinessWorkspace({
                     <summary>All estimates</summary>
                     <dl className="bw-values">
                       {Object.entries(opportunity ?? {})
-                        .filter(([k]) => !["id", "business_id"].includes(k))
+                        .filter(([k]) =>
+                          [
+                            "website_opportunity",
+                            "quoted_price",
+                            "estimated_build_cost",
+                            "research_cost",
+                            "estimated_sales_cost",
+                            "priority",
+                          ].includes(k),
+                        )
                         .map(([key, value]) => (
                           <div key={key}>
                             <dt>{label(key)}</dt>

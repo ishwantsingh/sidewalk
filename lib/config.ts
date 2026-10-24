@@ -30,13 +30,12 @@ export const runSchema = z
       .min(1)
       .max(5),
     maxBusinesses: z.number().int().min(1).max(30),
-    siteScoreThreshold: z.literal(45).default(45),
     maxSitesToBuild: z.number().int().min(1).max(3),
     maxRealEmails: z.number().int().min(0).max(3),
     maxSalesTasks: z.number().int().min(0).max(3),
     requireEmailAndPhone: z.boolean().default(false),
     maxLovableRepairAttempts: z.number().int().min(0).max(2),
-    maxEstimatedRunCostUsd: z.number().min(1).max(100),
+    maxEstimatedRunCostUsd: z.number().min(1).max(250),
   })
   .superRefine((run, ctx) => {
     if (run.selectedBusinessId && run.maxSitesToBuild !== 1)
@@ -88,8 +87,6 @@ export const required = [
   "COST_LOVABLE_BUILD_USD",
   "COST_LOVABLE_REPAIR_USD",
   "SALE_PRICE_USD",
-  "PAYMENT_FEE_PERCENT",
-  "PAYMENT_FEE_FIXED_USD",
 ];
 export function missingConfig() {
   return configIssues().map((issue) => issue.key);
@@ -130,20 +127,14 @@ export function configIssues() {
       }
     } else if (
       key.startsWith("COST_") ||
-      [
-        "TERAC_MAX_TASK_COST_USD",
-        "SALE_PRICE_USD",
-        "PAYMENT_FEE_PERCENT",
-        "PAYMENT_FEE_FIXED_USD",
-      ].includes(key)
+      ["TERAC_MAX_TASK_COST_USD", "SALE_PRICE_USD"].includes(key)
     ) {
       const number = Number(value);
       if (
         !Number.isFinite(number) ||
         number < 0 ||
         (["SALE_PRICE_USD", "TERAC_MAX_TASK_COST_USD"].includes(key) &&
-          number === 0) ||
-        (key === "PAYMENT_FEE_PERCENT" && number > 100)
+          number === 0)
       )
         reason = "Invalid numeric amount";
     } else if (key === "DOWNLOAD_SIGNING_SECRET" && value.length < 32)

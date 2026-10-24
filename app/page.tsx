@@ -183,7 +183,6 @@ export default function Dashboard() {
           ? runs.find((run) => run.id === buildTarget.run_id)?.params.types
           : [String(f.get("types"))],
         maxBusinesses: buildTarget ? 1 : Number(f.get("maxBusinesses")),
-        siteScoreThreshold: 45,
         maxSitesToBuild: Number(f.get("maxSitesToBuild")),
         maxRealEmails: Number(f.get("maxRealEmails")),
         maxSalesTasks: Number(f.get("maxSalesTasks")),
@@ -490,7 +489,7 @@ export default function Dashboard() {
                     name="maxSitesToBuild"
                     type="number"
                     readOnly={!!buildTarget}
-                    defaultValue={buildTarget ? 1 : 2}
+                    defaultValue={1}
                     min={1}
                     max={buildTarget ? 1 : 3}
                     required
@@ -501,7 +500,7 @@ export default function Dashboard() {
                   <input
                     name="maxRealEmails"
                     type="number"
-                    defaultValue={buildTarget ? 1 : 2}
+                    defaultValue={1}
                     min={0}
                     max={3}
                     required
@@ -512,7 +511,7 @@ export default function Dashboard() {
                   <input
                     name="maxSalesTasks"
                     type="number"
-                    defaultValue={buildTarget ? 1 : 2}
+                    defaultValue={1}
                     min={0}
                     max={3}
                     required
@@ -524,27 +523,25 @@ export default function Dashboard() {
                     name="maxEstimatedRunCostUsd"
                     type="number"
                     step="0.01"
-                    defaultValue={buildTarget ? 26 : 75}
+                    defaultValue={75}
                     min={1}
-                    max={100}
+                    max={250}
                     required
                   />
                 </label>
               </div>
               <label className="run-contact-filter">
-                <input
-                  type="checkbox"
-                  name="requireEmailAndPhone"
-                  defaultChecked={!!buildTarget}
-                />
+                <input type="checkbox" name="requireEmailAndPhone" />
                 <span>
                   Require both a sourced email and phone before building
                 </span>
               </label>
               <p className="form-note">
-                Up to 2 repairs per site. Qualified prospects receive an email
-                when a sourced address is available and a Terac call when a
-                sourced phone is available.
+                Prioritizes businesses with no website, then weak websites, with
+                a sourced email or phone. Ranking is based on need and contact
+                availability. Up to 2 repairs per site. Qualified prospects
+                receive an email when a sourced address is available and a Terac
+                call when a sourced phone is available.
               </p>
               <button disabled={loading || missing.length > 0 || !ready}>
                 {loading ? "Starting…" : "Start run"}
